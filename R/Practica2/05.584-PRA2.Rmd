@@ -10,7 +10,7 @@ output:
     toc: yes
     toc_depth: 2
     includes:
-      in_header: 05.584-PEC-header.html
+      in_header: 05.584-PRA2-header.html
   word_document: default
   pdf_document:
     highlight: zenburn
@@ -95,9 +95,9 @@ D'aquesta manera es demana a l'estudiant que completi els següents passos:
 # Rúbrica
 ******
 * 15%. Es generen regles i es comenten i interpreten les més significatives. A més es genera matriu de confusió per mesurar la capacitat predictiva de l'algoritme.  
-* 15%. Es genera model no supervisat, es mostren i comenten mesures de qualitat del model generat i es comenten les conclusions aix� com la descripci� dels grups resultants.  
-* 20%. Es genera model no supervisat amb mètrica de distància diferent a l'anterior. Es mostren i comenten mesures de qualitat del model generat i es comenten les conclusions. A més es comparen els dos models no supervisats amb mètriques de distància diferent aix� com la descripci� dels grups resultants.  
+* 15%. Es genera model no supervisat, es mostren i comenten mesures de qualitat del model generat i es comenten les conclusions aix? com la descripci? dels grups resultants.  
+* 20%. Es genera model no supervisat amb mètrica de distància diferent a l'anterior. Es mostren i comenten mesures de qualitat del model generat i es comenten les conclusions. A més es comparen els dos models no supervisats amb mètriques de distància diferent aix? com la descripci? dels grups resultants.  
 * 15%. Es genera un model supervisat sense PCA/SVD previ, es mostren i comenten mesures de qualitat del model generat i es comenta extensament el coneixement extret del model.  
-* 15%. Es genera un model supervisat amb PCA/SVD previ, es mostren i comenten mesures de qualitat del model generat i es comenta extensament el coneixement extret del model. Es valorar� l'extracci� de coneixement del model generat.  
+* 15%. Es genera un model supervisat amb PCA/SVD previ, es mostren i comenten mesures de qualitat del model generat i es comenta extensament el coneixement extret del model. Es valorar? l'extracci? de coneixement del model generat.  
 * 20%. Es compara la capacitat predictiva dels dos models supervisats i es comenta la diferència de rendiment en base a l'efecte PCA/SVD.  
 

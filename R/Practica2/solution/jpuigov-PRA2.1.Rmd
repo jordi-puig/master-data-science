@@ -1,0 +1,115 @@
+---
+title: 'Mineria de dades: PRA2 - Modelat d''un joc de dades'
+author: "Autor: Nom estudiant"
+date: "Novembre 2019"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PRA2-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Carrega de les llibreries que es necessiten
+```{r message= FALSE, warning=FALSE}
+library(arules)
+library(C50)
+library(caret)
+library(class)
+library(cluster)
+library(dplyr)
+library(factoextra)
+library(fpc)
+library(ggpubr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(mclust)
+library(plyr)
+library(randomForest)
+library(rattle)
+library(RColorBrewer)
+library(rpart.plot)
+library(rpart)
+library(vcd)
+library(FactoMineR)
+```
+
+******
+# Classificació: **Model supervisat** sense aplicar **PCA/SVD**
+******
+
+
+```{r}
+## obetnim primer una mostra del total de forma aleatoria (hem guardat físicament aquest random per poder reproduïr el mateix i el carreguem de disc)
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+summary(bank.data)
+
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+data.train <- bank.data[random.data,]
+data.test <- bank.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:16]
+train.y <- data.train[,17]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:16]
+test.y <- data.test[,17]
+```
+
+```{r}
+# amb l'atribut winnow eliminem dimensions que no tenen impacte en les classes de sortida
+model <- C50::C5.0(train.x, train.y, rules=TRUE)
+predicted.model <- predict(model, test.x, type="class")
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+summary(model)
+```
+
+Hem obtingut una predicció molt alta amb un arbre realment molt simplificat amb només dues regles.
+
+## Visualització de l’arbre de decissió
+```{r}
+model <- C50::C5.0(train.x, train.y, tree=TRUE)
+plot(model)
+summary(model)
+```
+
+
+## Validació de la qualitat del model
+```{r}
+predicted.model <- predict(model, test.x, type="class")
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+```
+
+Tenin una precissió de model força bona, de mes del 90% dels casos. Si per exemple, tinguessim un comercials que fessin campanyes telefòniques per a captar nous clients, podríem fer servir aquest model per a predir amb més d'un 90% de fiabilitat quin target atacar o quines decissions de comportament prendre.
+
+
+Fent servir la matriu de confusió veiem la qualitat del model també:
+
+```{r}
+## creem la matriu per avaluar la prova
+matrix.conf <- table(Class=predicted.model,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+```
+
+
+```{r}
+confusionMatrix(predicted.model,test.y, dnn = c("Prediction"))
+```

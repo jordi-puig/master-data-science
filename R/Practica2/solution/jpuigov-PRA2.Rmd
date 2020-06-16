@@ -1,0 +1,1569 @@
+---
+title: 'Mineria de dades: PRA2 - Modelat d''un joc de dades'
+author: "Autor: Nom estudiant"
+date: "Novembre 2019"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PRA2-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Carrega de les llibreries que es necessiten
+```{r message= FALSE, warning=FALSE}
+library(arules)
+library(C50)
+library(caret)
+library(class)
+library(cluster)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(fpc)
+library(ggpubr)
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(mclust)
+library(plyr)
+library(purrr)
+library(randomForest)
+library(rattle)
+library(RColorBrewer)
+library(rpart.plot)
+library(rpart)
+library(vcd)
+```
+******
+# Introducció
+******
+
+## Presentació
+Aquesta pràctica cobreix de forma transversal l'assignatura.
+
+Les Pràctiques 1 i 2 de l'assignatura es plantegen d'una forma conjunta de manera que la Pràctica 2 serà continuació de la 1.
+
+L'objectiu global de les dues pràctiques consisteix en seleccionar un o diversos jocs de dades, realitzar les tasques de preparació i anàlisi exploratòria amb l'objectiu de disposar de dades llestos per aplicar algoritmes de clustering, associació i classificació.
+
+## Datasets
+
+A partir de la pràctica 1 vam generar des de 2 datasets originals (retail i bank) 5 datasets resultants que farems servir per als diferents exercicis de la pràctica 2.
+
+* bank-clean-discret: conjunt de dades obtingut a partir del dataset de [marqueting bancari](https://archive.ics.uci.edu/ml/datasets/Bank+Marketing) on s'han estat discretitzats alguns camps, eliminat alguns camps nulls i eliminar outliers.
+
+* bank-discret: conjunt de dades obtingut a partir del dataset de [marqueting bancari](https://archive.ics.uci.edu/ml/datasets/Bank+Marketing) on s'han estat discretitzats alguns camps. No s'han eliminat nulls ni outliers.
+
+* retail-customer: conjunt de dades obtingut del dataset  de [venta online](http://archive.ics.uci.edu/ml/datasets/Online+Retail) on s'han generat nous atribtuts per a tenir dades de comportament dels clients. 
+
+* retail-product: conjunt de dades obtingut del dataset  de [venta online](http://archive.ics.uci.edu/ml/datasets/Online+Retail) on s'han generat nous atribtuts per a tenir dades dels productes.
+
+* retail-association: conjunt de dades obtingut del dataset  de [venta online](http://archive.ics.uci.edu/ml/datasets/Online+Retail) on s'han generat transaccions de les compras realitzades.
+
+
+******
+# Associació: Generació de regles a partir de **Regles d'associació**.
+******
+
+A partir del dataset que hem preparat en la pràctica 1 anem a generar regles d'associació.
+
+## Carreguem el fitxer
+
+```{r}
+retail.association <- read.csv('retail-association.csv', sep = ',')
+summary(retail.association)
+```
+
+## Obtenció de transaccions
+
+Fem una transformació per obtenir les transaccions de les compres segons el InvoiceNo. El camps que ens interessa veure és Description.
+
+```{r}
+transations_split <- split(x=retail.association[,"Description"],f=retail.association$InvoiceNo)
+
+# trasformem el data com a transactions. Cada transacció es una compra (InvioceNo) i els productes que ha comprat
+transations <- as(transations_split,"transactions")
+
+itemFrequencyPlot(transations, support = 0.04, cex.names = .6, col = rainbow(15), topN=30)
+
+```
+
+Mostrem els productes que més es repeteixen. En concret estem mostrant aquells que tenen un suport o freqüència >= 0.04 Això vold ir que, si tenim 16835 transaccions, estem mostrant x >= 16835 * 0.04, és a dir aquells que apareixen com a mínim 673,4 vegades.
+
+
+Si llancem l’algoritme “apriori”, generarem directament un set de regles amb diferent support, confidence i lift.
+
+* El support indica quantes vegades s’han trovat les regles {lsh => rhs} en el dataset, com més alt millor. Es la “popularitat” d’un conjunt d’elements del dataset. On {lsh => rhs} indica que si es compra lsh, compra rhs.
+
+* La confidence ens parla de la probabilitat de comprar {rhs} si es compra {lhs} (lhs => rhs / lhs).
+
+* El lift és un paràmetre que ens indica quan d’aleatorietat hi ha a les regles. Un lift d'1 o menys ens indica que la regla és completament fruit de l’atzar. El lift ens diu eb una regla, com es produeix la regla en funció dels elements de la regla (support(lhs => rhs) / support(lhs) * support(rhs)).
+
+Generem les regles per un support mínim de 0.02, confidence mínim de 0.4
+```{r}
+rules <- apriori(transations, parameter = list(support = 0.02, confidence = 0.4))
+```
+
+```{r}
+inspect(head(sort(rules, by = "confidence"), 10))
+```
+
+Amb aquesta ordenació per confidence, tenim una probabilitat alta que si compren {PINK REGENCY TEACUP AND SAUCER, ROSES REGENCY TEACUP AND SAUCER} compraran {GREEN REGENCY TEACUP AND SAUCER}. És un exemple, el mateix passa amb la resta de les 9 regles mostrades. En tots els casos el lift és molt alt, per tant no hi ha cap tipus d'aleatorietat en els resultats.
+
+
+```{r}
+inspect(head(sort(rules, by = "support"), 10))
+```
+
+Si ordenem per support, veiem les regles que més cops s’han produït a tot el conjunt. La regla comprar {GREEN REGENCY TEACUP AND SAUCER} => {ROSES REGENCY TEACUP AND SAUCER } s’ha produït més de 517 cops. Aquestes regles tenen a més una probabilitat condicionada (confidence) relativament alta > 40%, algunes amb més d'un 80%.
+
+El que queda força clar que els productes són similars i d'aquí el patró de compra. 
+
+Ara executarem el mateix algoritme baixant el support i pujan el confidence. 
+```{r}
+rules2 <- apriori(transations, parameter = list(support = 0.005, confidence = 0.9))
+```
+
+```{r}
+inspect(head(sort(rules2, by = "confidence"), 10))
+```
+
+Ara hem modificat l'algoritme per a produir regles amb un confidence molt alt, encara que no es produeixin gaires cops en el total del dataset(support més baix). Tenim similaritat de productes, però encara així seria una bona forma de treure campanyes de marketing.
+
+```{r}
+inspect(head(sort(rules2, by = "support"), 10))
+```
+
+El mateix ordenat per support. Els lifts són altíssims, per sobre d'1 ens donaríem per satisfets.
+
+```{r}
+inspect(head(sort(rules2, by = "lift"), 10))
+```
+
+La conclusió que podem treure d'aquest estudi és que a partir de l'algoritme d'associació podem veure patrons de conducta en les compres que es repeteixen i podem trobar associacions amb una fiabilitat molt alta.
+
+******
+# Clustering (concepte de distància): K-means o centroides 
+******
+Aquest algoritme primerament fixa un nombre de clusters (o centres de clusters) i a partir d’aquest nombre construeix els grups. Per a executar el mètode de k-means o centroides partim de la base que no coneixem el nombre òptim de clústers. Provarem amb diversos centres (del 2 al 10) per veure quina aproximació és millor.
+
+**Com funciona Kmeans?**
+
+* Definim el nombre de clústers (k)
+* Inicialitzar k centroides de forma aleatòria.
+* Etapa d'assignació: assigna cada observació al centre (punt central) més proper calculant la distància euclidiana al quadrat menor entre el centre i les observacions. (és a dir, la distància euclidiana al quadrat mínima entre el centre assignat i l'observació hauria de ser més petita que d'altres centres).
+* Pas d’actualització: calculem els nous mitjans com a centroides per als clústers nous.
+* Repetiu tant el pas d’assignació com d’actualització (és a dir, els passos 3 i 4) fins que s’arribi a la convergència (suma total mínima del quadrat) o a la iteració màxima.
+
+Havíem preparat el model per fer dos estudis: de productes com de clients. Començarem pels clients.
+
+## Estudi de customers
+
+```{r}
+customer.data <- read.csv('retail-customer.csv', sep = ',')
+summary(customer.data)
+```
+
+Anem a fer l’estudi amb 4 variables:
+
+* Days: Dies des de la darrera compra (respecte a la data del darrer producte comprat)
+* NumInvoices: Nombre de factures o compres realitzades
+* TotalCost: Cost gastat total
+* NumStocks: Nombre de productes comprats en total
+
+```{r}
+# filtrem els camps a treballar
+customer.data.clean <- customer.data[,c('Days','NumInvoices','TotalCost','NumStocks')]
+summary(customer.data.clean)
+```
+
+Eliminarem els outliers de totalCost, ja que crec que poden desvirtuar la realitat. Per a trobar valors extrems anem a aplicar la idea dels IQR (interquartile ranges):
+
+* [referència 1](http://www.mathwords.com/o/outlier.htm)
+* [referència 2](http://r-statistics.co/Outlier-Treatment-With-R.html)
+
+Per a una determinada variable contínua, els outliers són aquelles observacions que es troben fora de 1.5 * IQR, on IQR, el “Inter Quartile Range” és la diferència entre el Q3 i el Q1:
+
+* Interquartile range, IQR = Q3 - Q1
+* lower = Q1 - 1.5 * IQR
+* Upper = Q3 + 1.5 * IQR
+
+```{r message= FALSE, warning=FALSE}
+
+# funció per treure els límits dels valors atípics:
+outliersLimits <- function(x) {
+    limits <- c("above", "under")
+    limits$above <- quantile(x, 0.75, type=6) + 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+    limits$under <- quantile(x, 0.25, type=6) - 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+  return(limits)
+}
+
+limits <- outliersLimits(customer.data.clean$TotalCost)
+
+# treiem aquest valors atípics de total cost. Per el límit superiot anem a agafar aquells que tenen una despesa superior a 0
+customer.data.clean <-subset(customer.data.clean, TotalCost > 0)
+customer.data.clean <-subset(customer.data.clean, TotalCost <= limits$above)
+summary(customer.data.clean)
+```
+
+Com la magnitud dels valors difereix notablement entre les variables, les escalem abans d'aplicar el clustering.
+
+```{r}
+df1 <- scale(customer.data.clean)
+```
+
+Mostrem en una gràfica els valors de la silueta mitjana de cada prova per comprovar quin nombre de clusters és el millor. Com més alt és el valor de la silueta, millor
+
+```{r}
+avg_sil <- function(k) {
+  km.res <- kmeans(df1, centers = k, nstart = 25, iter.max=25)
+  ss <- silhouette(km.res$cluster, dist(df1))
+  mean(ss[, 3])
+}
+
+k.values <- 2:12
+
+avg_sil_values <- map_dbl(k.values, avg_sil)
+
+plot(k.values, avg_sil_values,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "Nombre de clusters K",
+       ylab = "Avg. Silhouettes")
+
+avg_sil_values
+```
+
+El millor valor obtingut és de 2 clusters o tipus de clients, però del 3 al 7 estan relativament molt a prop quant a valor de Avg. Silhouettes.
+
+Podem executar el mateix procés amb la funció fviz_nbclust
+
+```{r}
+fviz_nbclust(df1, kmeans, method = "silhouette")
+```
+
+Res de nou. Surten 2 clusters. I del 3 al 7, bons valors també.
+
+
+Un altra forma d’avaluar quin és el millor nombre de clústers és considerar el millor model amb aquestes condicions:
+
+* Ofereix la menor suma dels quadrats de les distàncies dels punts de cada grup respecte al seu centre (withinss). Això vol dir que els elements dels grups estan junts.
+
+* La separació més gran entre centres de grups (betweenss). Els grups están separats.
+
+És una idea conceptualment similar a la silueta. Una manera comú de fer la selecció del nombre de clústers consisteix a aplicar el mètode elbow (colze). Es fa una selecció del nombre de clústers a partir de la inspecció de la gràfica que s’obté l’iterar amb el mateix conjunt de dades per a distints valors del nombre de clústers. Es seleccionarà el valor que es troba en el colze de la corba.
+
+```{r}
+wss <- function(k) {
+  kmeans(df1, k, nstart = 25, iter.max = 25 )$tot.withinss
+}
+
+# fem fins a 15 iteracions
+k.values <- 1:15
+
+
+wss_values <- map_dbl(k.values, wss)
+
+plot(k.values, wss_values,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Nombre de clusters K",
+       ylab="Total within-clusters sum of squares")
+
+# la funció fviz_nbclust
+fviz_nbclust(df1, kmeans, method = "wss")
+```
+
+A partir de la corba obtinguda podem veure com a mesura que s’augmenta la quantitat de centroides, el valor de “tot.tot.withinss” disminueix, ja que la separació entre elements dels clusters és inferior. La idea és trobar un “colze”. El colze es troba on ja no es produeixen variacions importants en augmentar ‘Nombre de clusters’. El valor que jo dedueixo és el 3, és on tenim el colze.
+
+També es pot fer servir la funció kmeansruns del paquet fpc que executarà l’algoritme kmeans com un conjunt de valors i selecciona el valor del nombre de clústers que millor funcioni d’acord amb dos criteris: la silueta mitja (asw) i Calinski-Harabasz (“ch”).
+
+```{r}
+fit_ch  <- kmeansruns(df1, krange = 1:10, criterion = "ch", iter.max=25, runs=25)
+plot(1:10,fit_ch$crit,type="o",col="blue",pch=0,xlab="Nombre de clústers",ylab="Criteri Calinski-Harabasz")
+```
+
+Amb aquest criteri estem obtenint 3 clusters també.
+
+```{r}
+fit_asw <- kmeansruns(df1, krange = 1:10, criterion = "asw", iter.max=25, runs=25)
+plot(1:10,fit_asw$crit,type="o",col="blue",pch=0,xlab="Nombre de clústers",ylab="Criteri silueta mitja")
+```
+
+Realitzem comparacions visuals amb el nombre de clusters que hem trobat en la majoria d'estudis (2 i 3 clusters)
+
+```{r}
+# realitzem una divisió en 2 clusters
+clusters <- kmeans(df1, centers = 2, iter.max = 25, nstart = 25)
+clusters$centers
+```
+
+```{r}
+fviz_cluster(clusters, data = df1, geom = "point", repel = TRUE)
+```
+
+El mapa ens diferencia 2 grups de clients força clars.
+
+```{r}
+fviz_cluster(clusters, data = df1, geom = "point", choose.vars = c("Days", "NumInvoices"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+Si mostrem el nombre de factures x dies. Veiem una sèrie de clients potencialment molt bons, on han comprat relativament fa poc i tenen moltes factures. Són clients habituals.
+
+```{r}
+fviz_cluster(clusters, data = df1, geom = "point", choose.vars = c("Days", "TotalCost"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+En aquesta mostra tenim els millors clients en el grupuscle superior-esquerra. Més despesa i menys dies des de la darrera compra.
+
+```{r}
+fviz_cluster(clusters, data = df1, geom = "point", choose.vars = c("NumInvoices", "TotalCost"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+I en l'estudi de les dues variables, nombre de factures x cost. Diferenciem clients que gasten molt amb poques factures (part superior - esquerra) i altres que gasten força amb més factures (part superior - dreta).  
+
+
+Fem l'estudi visual amb 3 clusters:
+```{r}
+# realitzem una divisió en 3 clusters
+clusters <- kmeans(df1, centers = 3, iter.max = 25, nstart = 25)
+clusters$centers
+
+```
+
+```{r}
+fviz_cluster(clusters, data = df1, geom = "point", repel = TRUE)
+```
+
+Un dels dos clusters que teníem s'ha dividit en dos (cluster 1 i 2).
+
+```{r}
+set.seed(123)
+fviz_cluster(clusters, data = df1, geom = "point", choose.vars = c("Days", "NumInvoices"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+Mostrem el nombre de factures x dies: 
+
+* el grup 1, fa relativament poc que han realitzat compra però amb menys factures.
+* el grup 2, poques compres i fa més dies que no compren.
+* el grup 3,  és potencialment el millor, tenen diverses factures i fa pocs dies que han comprat, reincideixen.
+
+
+```{r}
+set.seed(123)
+fviz_cluster(clusters, data = df1, geom = "point", choose.vars = c("Days", "TotalCost"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+En aquesta mostra tenim, Days vs Cost:
+
+* el grup 1, fa poc que han realitzat compra però amb menys cost
+* el grup 2, fa més temps que no compren i han gastat menys.
+* els millors clients en el grup 3.
+
+```{r}
+set.seed(123)
+fviz_cluster(clusters, data = df1, geom = "point", choose.vars = c("NumInvoices", "TotalCost"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+I en l'estudi de les dues variables, nombre de factures x cost: 
+
+* hi ha dos grups que pràcticament en superposen.
+* un tercer que diferencia el nombre de factures (o compres) que han realitzat.
+
+
+En l'estudi hem optat per a realitzar les gràfiques visuals amb 2 i 3 clusters. De tota manera, els primers algoritmes ens estaven donant possibilitat de més agrupacions fins a un total de 7.
+
+## Estudi de productes
+
+Ara farem un estudi similar amb els productes.
+
+```{r}
+retail.product.data <- read.csv('retail-product.csv', sep = ',')
+summary(retail.product.data)
+```
+
+Anem a fer l'estudi amb 3 variables:
+
+* UnitPrice: Preu unitari del producte.
+* Days: Dies des de la darrera compra (respecte a la data del darrer producte comprat)
+* TotalStockUnits: Unitats comprades totals
+
+
+```{r}
+product.data.clean <- retail.product.data[,c('UnitPrice', 'Days','TotalStockUnits')]
+summary(product.data.clean)
+```
+
+
+```{r}
+# eliminem valors negatius o igual a 0
+product.data.clean <- subset(product.data.clean, product.data.clean$TotalStockUnits > 0)
+product.data.clean <- subset(product.data.clean, product.data.clean$UnitPrice > 0)
+product.data.clean <- subset(product.data.clean, product.data.clean$Days > 0)
+summary(product.data.clean)
+```
+
+Eliminarem els outliers de total cost, ja que crec que poden desvirtuar la realitat.
+Funció per treure els límits dels valors atípics:
+```{r message= FALSE, warning=FALSE}
+outliersLimits <- function(x) {
+    limits <- c("above", "under")
+    limits$above <- quantile(x, 0.75, type=6) + 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+    limits$under <- quantile(x, 0.25, type=6) - 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+  return(limits)
+}
+
+limits <- outliersLimits(product.data.clean$UnitPrice)
+
+# treiem aquest valors atípics de total cost
+product.data.clean <-subset(product.data.clean, UnitPrice <= limits$above)
+
+summary(product.data.clean)
+```
+
+Com que no volem que l'algoritme de clúster no depengui d'una unitat variable arbitrària, comencem escalant / estandarditzant les dades mitjançant la funció scale.
+
+```{r}
+df2 <- scale(product.data.clean)
+```
+
+Anem a fer servir el mètode de la silueta per a trobar el millor nombre de clusters. En resum, l’enfocament mitjà de la silueta mesura la qualitat d’una agrupació. És a dir, determina el bé que cada objecte es troba dins del seu clúster. Una gran amplada mitjana de silueta indica una bona agrupació. El mètode de silueta mitjana calcula la silueta mitjana d’observacions per a diferents valors de k.
+
+```{r}
+avg_sil <- function(k) {
+  km.res <- kmeans(df2, centers = k, nstart = 25, iter.max=25)
+  ss <- silhouette(km.res$cluster, dist(df2))
+  mean(ss[, 3])
+}
+
+k.values <- 2:15
+
+avg_sil_values <- map_dbl(k.values, avg_sil)
+
+plot(k.values, avg_sil_values,
+       type = "b", pch = 19, frame = FALSE, 
+       xlab = "Nombre de clusters K",
+       ylab = "Avg. Silhouettes")
+```
+
+Segons el mètode de la silueta obtenim el millor nombre de clusters entre 4 i 5 tipus de productes diferents.
+
+Podem executar el mateix procés amb la funció fviz_nbclust
+```{r}
+fviz_nbclust(df2, kmeans, method = "silhouette")
+```
+
+4 és el nombre de clusters, seguit del 5 altre cop.
+
+```{r}
+# function to compute total within-cluster sum of square 
+wss <- function(k) {
+  kmeans(df2, k, nstart = 25,iter.max=25)$tot.withinss
+}
+
+# Compute and plot wss for k = 1 to k = 15
+k.values <- 1:15
+
+# extract wss for 2-15 clusters
+wss_values <- map_dbl(k.values, wss)
+
+plot(k.values, wss_values,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Number of clusters K",
+       ylab="Total within-clusters sum of squares")
+```
+
+
+Tenim el colze on ja no es produeixen variacions importants en augmentar ‘Nombre de clusters’. El valor que jo dedueixo és entre 4 i 5, altre cop.
+
+Afortunadament, aquest procés per calcular el "mètode del colze" i la silueta s'ha agrupat en una única funció (fviz_nbclust):
+
+```{r}
+fviz_nbclust(df2, kmeans, method = "wss")
+```
+
+No hi ha molt dubte. Tenim entre 4 tipus de productes diferents segons dies des de la darrera compra, unitats comprades i cost del producte.
+
+
+Anem a fer servir la funció kmeansruns del paquet fpc que executarà l’algoritme kmeans com un conjunt de valors i selecciona el valor del nombre de clústers que millor funcioni d’acord amb dos criteris: la silueta mitja (asw) i Calinski-Harabasz (“ch”).
+
+```{r}
+fit_asw <- kmeansruns(df2, krange = 2:20, criterion = "asw", iter.max=25, runs=10)
+plot(1:20,fit_asw$crit,type="o",col="blue",pch=0,xlab="Nombre de clústers",ylab="Criteri silueta mitja")
+```
+
+Tornem a tenir 4 o 5 clusters. Farem estudis visuals amb aquests valors, ja que els resultats són molt més clars que amb els customers.
+
+```{r}
+# realitzem una divisió en 4 clusters
+clusters4 <- kmeans(df2, centers = 4, iter.max=25, nstart = 25)
+clusters4$centers
+fviz_cluster(clusters4, data = df2, geom = "point", repel = TRUE)
+
+```
+
+```{r}
+set.seed(123)
+fviz_cluster(clusters4, data = df2, geom = "point", choose.vars = c("UnitPrice", "TotalStockUnits"), repel = TRUE, ggtheme = theme_minimal())
+
+```
+
+Unitats venudes totals x Preu unitari:
+
+* Grup 1: es venen força unitats i tenim preus baixos i mitjans.
+* Grup 2: tenim preus mitjans i alts, però es venen poques unitats.
+* Grup 3: preus mitjans i baixos i poques unitats venudes.
+* Grup 4 és un grup molt solapat amb els altres. Segurament la diferencia es troba en l'altre variable no inclosa (Days).
+
+
+```{r}
+set.seed(123)
+fviz_cluster(clusters4, data = df2, geom = "point", choose.vars = c("UnitPrice", "Days"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+Preu unitari x dies des de la darrera compra:
+
+* Grup 1: es troba molt encavalcat amb el 3 i 4.
+* Grup 2: fa poc que s'han comprat i tenen preus mitjans-alts.
+* Grup 3: fa poc que s'han comprat i tenen preus mitjans-baixos.
+* Grup 4: fa dies que no es compra i preus en tot el ventall.
+
+```{r}
+set.seed(123)
+fviz_cluster(clusters4, data = df2, geom = "point", choose.vars = c("TotalStockUnits", "Days"), repel = TRUE, ggtheme = theme_minimal())
+```
+
+Dies des de la darrera compra x Unitats venudes:
+
+* Grup 1: s'han venut relativament de mig a moltes unitats i fa poc de la darrera compra.
+* Grup 2: s'han venut poques unitats i la darrera compra és recent.
+* Grup 3: superposat amb els altres. Depèn de l'altre variable.
+* Grup 4: s'han venut poques unitats i fa temps.
+
+```{r}
+# realitzem una divisió en 5 clusters
+clusters5 <- kmeans(df2, centers = 5, iter.max=25, nstart = 25)
+clusters5$centers
+summary(df2)
+fviz_cluster(clusters5, data = df2, geom = "point", repel = TRUE)
+```
+
+Realment no ens aporta gaire generar un altre cluster. Amb 4 clusters ens quedem.
+
+******
+# Clustering (concepte de distància): Mètode agregació jerarquica incremental (Hierarchical Agglomerative Clustering - HAC) 
+******
+
+Funciona amb l’algoritme dels veïns més propers (k-nearest neighbours) de la següent forma:
+
+* Assignem cada element al seu propi clúster, de manera que si té N elements, ara té N clústers, cadascun amb un sol element. Deixem que les distàncies (similitud) entre els clusters siguin iguals a les distàncies (similitud) entre els elements que contenen.
+
+* Es troba el parell més proper (més similar) de clústers i es combinen en un únic clúster, de manera que ara tenim un clúster menys.
+
+* Calculem distàncies (similitud) entre el nou clúster i cadascun dels clústers antics.
+
+* Es repeteix els passos 2 i 3 fins que tots els elements siguin agrupats en un sol grup de mida N.
+
+De formes de mesurar les distàncies entre grups tenim de diversos tipus. Provarem només: “average”, “complete” i “ward”.
+
+## Estudi de customers
+
+Fem servir el dataframe: 'customer.data.clean' que hem generat a [Clustering amb K-means o centroides](#Clustering amb K-means o centroides):
+
+```{r}
+summary(customer.data.clean)
+```
+
+Abans de tot, normalitzem les dades i calculem la distància euclidiana entre els elements.
+
+```{r}
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+customer.data.norm <- as.data.frame(lapply(customer.data.clean[,1:4], ni))
+# primer fem la matriu de la distància euclideana dels elements de la taula de llavors.
+customer.data.euc <- dist(customer.data.norm, method = "euclidean")
+```
+
+### Enllaç complet
+
+Estratègia de la distància màxima o similitud mínima. En aquest mètode, també conegut (complete linkage), es considera que la distància o similitud entre dos clústers cal mesurar-la atenent a elements més dispars, és a dir, la distància o similitud entre clústers ve dada, respectivament, per la màxima distància (o mínima similitud) entre components dels clústers.
+
+```{r}
+# fem servir hclust per a realitzar les agrupacions
+hc1 <- hclust(customer.data.euc, method = "complete")
+plot(hc1, 
+     main = "Complete linkage", 
+     xlab = "Customers",
+     ylab = "",
+     cex = 0.04,
+     sub = "")
+abline(h = 0.78, col = "red")
+abline(h = 1.1, col = "blue")
+```
+
+El dendograma ens està mostrant les distàncies euclidianes entre els diferents elements (customers) de la mostra i la separació gràfica conformes en van agrupant els clusters. Les interpretació és subjectiva però agafariem 4 i 7 clusters.
+
+### Enllaç promig
+En aquesta estratègia la distància, o similitud, de l’clúster Ci amb el Cj s’obté com la mitjana aritmètica entre la distància, o similitud, dels elements d’aquests clústers.
+
+
+```{r}
+hc2 <- hclust(customer.data.euc, method = "average")
+
+plot(hc2, 
+     main = "Average linkage", 
+     xlab = "Customers",
+     ylab = "",
+     cex = 0.1,
+     sub = "")
+abline(h = 0.4, col = "red")
+abline(h = 0.55, col = "blue")
+```
+
+Similar, entre 3 i 7 grups de customers.
+
+### Mètode Ward
+El mètode de Ward apunta a minimitzar la variància total dins de el grup. A cada pas, es fusionen el parell de clústers amb una distància mínima entre els clústers. En altres paraules, forma grups d’una manera que minimitza la pèrdua associada amb cada grup. Té molt bona efectivitat a l'hora d'agrupar.
+
+```{r}
+hc3 <- hclust(customer.data.euc, method = "ward.D")
+
+plot(hc3, 
+     main = "Ward Method", 
+     xlab = "Customers",
+     ylab = "",
+     cex = 0.1,
+     sub = "")
+abline(h = 100, col = "red")
+abline(h = 55, col = "blue")
+```
+
+Amb el mètode ward veiem més clarament 4 o 5 grups de clients. Els altres clusters es troben molt més allunyats en l'agrupació. Ens quedariem amb 4 o 5 grups de customers.
+
+
+Anem a reduir la quantitat d'elements de la mostra i apliquem algoritme ward
+
+```{r}
+set.seed(123)
+sample <- customer.data.norm %>% sample_frac(0.10)
+sample.euc <- dist(sample, method = "euclidean")
+hc3 <- hclust(sample.euc, method = "ward.D")
+
+plot(hc3, 
+     main = "Ward Method", 
+     xlab = "Products",
+     ylab = "",
+     cex = 0.1,
+     sub = "")
+abline(h = 12, col = "red")
+abline(h = 7, col = "green")
+```
+
+Amb menys mostra estem treient entre 3 i 5 clusters.
+
+Dels 3 mètodes que hem fet servir el que dona una més bona interpretació és ward on podem veure entre 3 i 5 clusters.
+
+## Estudi de productes
+
+Fem servir el dataframe: 'product.data.clean' que hem generat a [Clustering amb K-means o centroides](#Clustering amb K-means o centroides):
+
+```{r}
+summary(product.data.clean)
+```
+
+Abans de tot, normalitzem les dades i calculem la distància euclidiana entre els elements.
+
+```{r}
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+product.data.norm <- as.data.frame(lapply(product.data.clean[,1:3], ni))
+# primer fem la matriu de la distància euclideana dels elements de la taula de llavors.
+product.data.euc <- dist(product.data.norm, method = "euclidean")
+```
+
+
+### Mètode Ward
+
+Executarem directament amb el mètode ward on veiem que tenim 4 clusters diferenciats.
+
+```{r}
+hc3 <- hclust(product.data.euc, method = "ward.D")
+
+plot(hc3, 
+     main = "Ward Method", 
+     xlab = "Products",
+     ylab = "",
+     cex = 0.1,
+     sub = "")
+abline(h = 70, col = "red")
+abline(h = 50, col = "blue")
+```
+
+El dendograma ens està mostrant les distàncies euclidianes entre els diferents elements (productes) de la mostra. Mostra la separació dels elements i dels clusters que es van formant. Sembla distingir entre 4 i 5 clusters. La distància fins a 3 clusters ja és molt llunyana.
+
+
+Reduïm la dimensionalitat de la mostra i apliquem algoritme ward.
+
+```{r}
+set.seed(123)
+sample <- product.data.norm %>% sample_frac(0.10)
+sample.euc <- dist(sample, method = "euclidean")
+hc3 <- hclust(sample.euc, method = "ward.D")
+
+plot(hc3, 
+     main = "Ward Method", 
+     xlab = "Products",
+     ylab = "",
+     cex = 0.1,
+     sub = "")
+abline(h = 8, col = "red")
+abline(h = 6, col = "green")
+```
+
+Podríem fer entre 4 i 5 clusters. Resultat molt similar al K-means o centroides.
+
+******
+# Clustering (concepte probabilístic): Mètodes d’agregació probabilítics
+******
+Els enfocaments dels mètodes probabilístics assumeixen una varietat de models de dades i apliquen l’estimació de màxima versemblança i els criteris de Bayes per identificar el model més probable i el nombre de grups.
+
+## Estudi de customers
+
+Agafem el model name VVV, (multivariate mixture, ellipsoidal, varying volume, shape, and orientation). És el nostre cas.
+
+```{r}
+sample <- scale(customer.data.clean, center=TRUE, scale=TRUE)
+mclust <- Mclust(sample[,1:4], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 10))
+plot(mclust, what = "uncertainty")
+```
+
+Ens ha generat 3 grups.
+
+Anem a veure amb variables 2 a 2:
+### Days x TotalCost
+```{r}
+mclust <- Mclust(sample[,c("Days","TotalCost")], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 5), modelName = "VVV")
+plot(mclust, what = "uncertainty")
+```
+
+Amb la l'estudi de Days i total cost ens està mostrant fins a 9 grups diferents. De 4 a 9 grups el BIC (Bayesian Information Criterion) és molt similar.
+
+### Days x NumStocks
+```{r}
+mclust <- Mclust(sample[,c("Days","NumStocks")], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 5), modelName = "VVV")
+plot(mclust, what = "uncertainty")
+```
+
+Days x NumStocks ens passa exactament el mateix.
+
+Anem a fer un darrer estudi del BIC
+
+```{r}
+BIC <- mclustBIC(sample)
+plot(BIC)
+summary(BIC)
+mod1 <- Mclust(sample, x = BIC)
+summary(mod1, parameters = TRUE)
+```
+
+## Estudi de productes
+
+```{r}
+sample <- scale(product.data.clean, center=TRUE, scale=TRUE)
+mclust <- Mclust(sample[,1:3], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 5), modelName = "VVV")
+plot(mclust, what = "uncertainty")
+```
+
+9 clusters en total. I de 6 a 9 clusters valors molt similars.
+
+### UnitPrice x Days
+```{r}
+mclust <- Mclust(sample[,c("Days","UnitPrice")], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 5), modelName = "VVV")
+plot(mclust, what = "uncertainty")
+```
+
+UnitPrice x Days ens dóna 9 clusters, pero de 4 a 8 és molt similar.
+
+### UnitPrice x TotalStockUnits
+```{r}
+mclust <- Mclust(sample[,c("UnitPrice","TotalStockUnits")], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 5), modelName = "VVV")
+plot(mclust, what = "uncertainty")
+```
+
+UnitPrice x TotalStockUnits de 7 a 9 clusters
+
+### TotalStockUnits x Days
+```{r}
+mclust <- Mclust(sample[,c("TotalStockUnits","Days")], modelName = "VVV")
+summary(mclust)
+plot(mclust, what = 'BIC', legendArgs = list(x = "bottomright", ncol = 5), modelName = "VVV")
+plot(mclust, what = "uncertainty")
+```
+
+Anem a fer un altre estudi del BIC
+
+```{r}
+BIC <- mclustBIC(sample)
+plot(BIC)
+summary(BIC)
+
+mod1 <- Mclust(sample, x = BIC)
+summary(mod1, parameters = TRUE)
+```
+
+Els millors BIC (Bayesian Information Criterion) que tenim és de 9 clusters.
+
+******
+# Clustering: Comparació de resultats
+******
+
+Partim de la base que les dades que tenim són de comportament de compra dels clients i de tipologia de productes:
+
+## Customers
+
+Fem un resum dels resultats obtinguts amb els 3 tipus de fer clustering pels clients.
+
+### K-Means
+
+Hem decidit que teníem entre 2 i 3 clusters, però en algun dels estudis hem tingut fins a 7 possibles clusters.
+
+### Hierarchical Agglomerative Clustering (HAC)
+
+Són els que ens han donat uns resultats més clars. Encara que amb enllaç complet i promig hem tingut de 3 a 7 clusters amb mètode ward hem pogut fixar millor el nombre de clusters a 4 o 5.
+
+### Mètodes d’agregació probabilístics
+
+En aquest cas hem tingut més disparitat de dades. En el primer estudi ens ha donat 3 clusters i després 5,6 i 9. No m'ha generat molta fiabilitat l'estudi fet amb mètodes probabilistics.
+
+De totes maneres hem vist en tots els estudis que hi havia un ventall una mica gran de possibles tipologies de clients, però si hagués de fer un estudi, seria entre 3 i 5 clusters.
+
+## Products
+
+Fem el mateix resum però pels productes.
+
+### K-Means
+
+En aquest cas hem tingut molt clarament una agrupació entre 4 i 5 clusters i més concretament en 4.
+
+### Hierarchical Agglomerative Clustering (HAC)
+
+Mateixos resultats que amb K-Means, 4 i 5 clusters. 
+
+### Mètodes d’agregació probabilístics
+
+Un altre cop tenim valors molt dispars comparats amb els mètodes basats en les distàncies HAC i K-Means.
+
+******
+# Classificació: **Model supervisat** sense haver aplicant prèviament **PCA/SVD**
+******
+
+Per a crear el model de l’arbre de decisió anem a fer servir la llibreria C50. Aquesta llibreria implementa funcions per a generar arbres amb l’algoritme C5.0 alhora basat en l’algoritme ID3 de Quinlan. Com a millores, permet treballar amb variables categòriques i discretes i realitza la poda de forma automàtica.
+
+El mètode ID3 tracta de trobar una partició que asseguri la màxima capacitat predictiva i la màxima homogeneïtat de les classes. Volem pocs atributs per a predir el màxim possible. Per a fer-ho, a l’escollir un atribut, calcula el guany obtingut, i el càlcul el fa amb la diferència de la informació d’una partició respecte al desordre (o entropia) que es genera a partir d’aquella elecció.
+
+La millora en la poda la realitza calculant la taxa d’error de les prediccions de les fulles. Es realitza una estimació pessimista de la predicció (amb calcul de la distribucuó binomial), i si els nodes fills tenen una estimació pitjor que la dels pares s’eliminen. És postpoda, és a dir, es realitza la poda després de contruir l’arbre.
+
+En aquest primer estudi anem a executar l'algoritme de predicció **sense excloure cap dels atributs del dataset.**
+
+## Preparació de les dades
+
+Prepararem les dades per a avaluar l’arbre de decisió. Dividim en conjunt de prova i conjunt d’entrenament. Un el fem servir per a construir el model de l'arbre de decisió i el de prova per avaluar quina precisió obtenim d’aquest arbre. Fem servir la proporció 0.7 entrenament, 0.3 d'avaluació. La variable a avaluar en aquest cas és la columna 'y'.
+
+```{r}
+# separem el 70% de conjunt d'entrenament del 30% per a avaluar
+
+## obtenim primer una mostra del total de forma aleatoria (hem guardat físicament aquest random per poder reproduïr el mateix i el carreguem de disc)
+
+# random.data <- sample(1:nrow(bank.data), 0.70 * nrow(bank.data))
+# write.csv(random.data,"random-data.csv",row.names=FALSE)
+
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+summary(bank.data)
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+data.train <- bank.data[random.data,]
+data.test <- bank.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:16]
+train.y <- data.train[,17]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:16]
+test.y <- data.test[,17]
+```
+
+## Creació del model del arbre de decissió
+
+```{r}
+model1 <- C50::C5.0(train.x, train.y, rules=TRUE)
+predicted.model1 <- predict(model1, test.x, type="class")
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model1 == test.y) / length(predicted.model1)))
+summary(model1)
+```
+
+L'arbre de decissió ha fet servir un total de 13 atributs per a generar les regles i ha generat un total de 38 regles.
+
+
+## Visualització de l’arbre de decissió
+```{r}
+set.seed(123)
+model1 <- C50::C5.0(train.x, train.y, tree=TRUE)
+summary(model1)
+```
+
+L'arbre té un tamany de 58 nodes amb una taxa d'error del 8.6%
+
+## Validació de la qualitat del model
+```{r}
+predicted.model1 <- predict(model1, test.x, type="class")
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model1 == test.y) / length(predicted.model1)))
+```
+
+Tenim una precisió de model força bona, de més del 91% dels casos. Si per exemple, tinguéssim uns comercials que fessin campanyes telefòniques per a captar nous clients, podríem fer servir aquest model per a predir amb més d'un 90% de fiabilitat quin target atacar o quines decisions de comportament prendre.
+
+
+Fent servir la matriu de confusió veiem la qualitat del model també:
+
+```{r}
+## creem la matriu per avaluar la prova
+matrix.conf <- table(Class=predicted.model1,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+```
+
+
+```{r}
+confusionMatrix(predicted.model1,test.y, dnn = c("Prediction"))
+```
+
+La veritat és que sense fer PCA tenim un valor de predicció molt bó amb un Kappa (aletorietat de la predicció) realment alt, cosa que es bó. 
+
+Fleiss et al. (2003) va afirmar que, a la majoria dels propòsits,
+
+* És poden prendre valors superiors a 0,75 per representar un excel·lent acord fora de l'atzar,
+* És poden prendre valors inferiors a 0,40 per representar un mal acord fora de l'atzar i
+* És poden prendre valors entre 0,40 i 0,75 per representar un acord just per a un bon acord fora de l’atzar.
+
+Altre cosa molt interessant:
+
+* Predicció del 'no': 0.9254
+* Predicció del 'yes': 0.6773
+
+Predim molt millor el 'no' que el 'yes'. Aquesta part no m'agrada tant.
+
+******
+# Classificació: **Model supervisat** aplicant prèviament **PCA/SVD**
+******
+
+## Preparació de les dades
+
+Preparem altre cop les dades per a avaluar l'arbre de decisió. Dividim en conjunt de prova i conjunt d'entrenament. Un el fem servir per a construir el model de l'arbre de decisió i el de prova per avaluar quina precisió obtenim d'aquest arbre. Fem servir la proporció 0.7 entrenament, 0.3 d'avaluació. La variable a avaluar en aquest cas és la columna 'y'.
+
+```{r}
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+summary(bank.data)
+
+# separem el 70% de conjunt d'entrenament del 30% per a avaluar
+
+## obetnim primer una mostra del total de forma aleatoria (hem guardat físicament aquest random per poder reproduïr el mateix i el carreguem de disc)
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+
+data.train <- bank.data[random.data,]
+data.test <- bank.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:16]
+train.y <- data.train[,17]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:16]
+test.y <- data.test[,17]
+
+```
+
+
+## Creació del model del 'arbre de decisió
+
+L’executem de forma que ens generi regles per a fer prediccions. Ara executem l'algoritme amb l'opció Winnowed. Aquesta opció no farà servir aquelles dimensions que no trobi que siguin rellevants, es a dir, està fent PCA de forma transparent i automàtica.
+
+```{r}
+# amb l'atribut winnow eliminem dimensions que no tenen impacte en les classes de sortida
+model2 <- C50::C5.0(train.x, train.y, rules=TRUE, size=4, control = C5.0Control(winnow = TRUE))
+summary(model2)
+predicted.model2 <- predict(model2, test.x, type="class")
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model2 == test.y) / length(predicted.model2)))
+```
+
+Anem a veure els resultats:
+
+* S’han llegit 26777 casos amb 9 atributs. Amb el winnowed s'han descartat 7 atributs per a construir les regles.
+* Classe per defecte -> ‘no’ (no contracta crèdit bancari)
+* S’han generat 24 regles de classificació
+* Ha fet servir els atributs:
+
+  - 99.55%	poutcome
+  - 97.03%	pdays
+  - 52.73%	duration
+  - 52.62%	month
+  - 29.83%	contact
+  - 28.48%	housing
+  - 28.38%	day
+  - 1.28%	loan
+  - 0.10%	balance
+  
+	
+* L’atribut amb més pes i que és l’arrel de l’arbre es poutcome.
+* L’arbre ha classificat malament 24 de 2385 cassos (8.9% d'errors):
+* Tots els lift, aleatorietat de la predicció estan per sobre d’1, per tant les regles són prou vàlides.
+
+## Regles de decisió generades
+
+L’arbre ha generat 24 regles de decisió. Podem observar que la fiabilitat de les primeres regles son totes les que estan orientades a la resposta 'no'. Ens es molt més fàcil predir el 'no' que el 'yes'. La primera regla amb 'yes', és la 10 amb un confidence de 0.818.
+
+- Regla 1: housing = yes & month = jan & pdays > 155 => no contracta amb un 99.4% de validesa.
+  - No contracten usuaris amb prèstec habitatge, durant el mes de gener i fa més de 155 dies del contacte d'una campanya anterior.
+
+- Regla 2: housing = yes & day <= 19 & month = may & duration <= 4  => no contracta amb un 99.3% de validesa.
+  - No contracten diposit a termini: tenen prèstec habitatge, contacte durant els primers dies del mes, mes de maig i la trucada una durada inferior o igual a 4 minuts.
+
+- Regla 3: duration <= 2 => no contracta amb un 97.9% de validesa.
+  - No contracten diposit a termini: aquesta regla és força interessant, quan les trucades duran poc no es contracta.
+
+- Regla 4: contact = unknown & month in {aug, jan, jul, jun, may, nov} & poutcome in {failure, other, unknown} => no contracta amb un 0.961 de validesa.
+  - No contracten diposit a termini:  el contacte no és ni phone ni cellurar, és unknown no sabem com ha estat & mesos = aug, jan, jul, jun, may, nov & resultat de la campanya no és success.
+
+- Regla 5: housing = yes & day > 17 & month = nov => no contracta amb un 0.951 de validesa
+  - No contracten diposit a termini:  té prestec d'habitatge, dia de la trucada és > 17, més de novembre i resultat de la campanya no és success
+
+- Regla 6: housing = yes & loan = yes & month = jun => no contracta amb un 0.946 de validesa
+  - No contracten diposit a termini:  té prestec d'habitatge, té prestec personal i és el mes de juny
+
+- Regla 7: housing = yes & day <= 7 & month = feb => no contracta amb un 0.941 de validesa
+  - No contracten diposit a termini:  té prestec d'habitatge, dia del mes menor de 8 i és el mes de febrer
+
+- Regla 8: housing = yes & day <= 20 & month = apr => no contracta amb un 0.932 de validesa
+  - No contracten diposit a termini:  té prestec d'habitatge, dia del mes menor de 21 i és el mes d'abril	
+
+- Regla 9: pdays <= 385 & poutcome in {failure, other, unknown} => no contracta amb un 0.910 de validesa
+  - No contracten diposit a termini:  han passat 385 dies del darrer contacte de la campanya anterior i no el resultat no va ser success	
+
+- Regla 10: contact = cellular & day <= 5 & month = dec & duration > 2 & poutcome in {failure, other, unknown} => sí contracta amb un 0.818 de validesa
+  - Sí contracten diposit a termini: contacte per telèfon mòbil, dia del mes inferior a 6, el mes de desembre, durada de la trucada > 2 minuts i resultat de la darrera campanya no va ser success
+
+- Regla 11: duration > 3 & pdays > 385 => sí contracta amb un 0.811 de validesa
+  - Sí contracten diposit a termini:durada de la trucada > 3 minuts i fa més de 385 díes del darrer contacte en la darrera campanya
+
+- Regla 14: month = sep & duration > 3 => sí contracta amb un 0.723 de validesa
+  - Sí contracten diposit a termini: mes de setembre i durada de la trucada per sobre de 3 minuts
+
+- Regla 15: loan = no & month = mar & duration > 2 &  poutcome in {other, unknown} => sí contracta amb un 0.722 de validesa
+  - Sí contracten diposit a termini: no té prestec personal, mes de març, durada de la trucada per sobre de dos minuts i resultat de la darrera campanya és 'unknown' o 'other'
+
+
+## Visualització de l’arbre de decissió
+```{r}
+set.seed(123)
+model2 <- C50::C5.0(train.x, train.y, control = C5.0Control(winnow = TRUE))
+plot(model2)
+summary(model2)
+```
+
+He generat un arbre de 55 nodes. En l’arbre podem veure que el primer nivell es realitza amb l’atribut poutcome. És el que aporta particions més homogènies.
+
+## Validació de la qualitat del model
+```{r}
+predicted.model2 <- predict(model2, test.x, type="class")
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model2 == test.y) / length(predicted.model2)))
+```
+
+Tenin una precissió de model força bona, de mes del 91% dels casos, però està una mica per sota que sense fer winnowed.
+
+Fent servir la matriu de confusió veiem la qualitat del model també:
+
+```{r}
+## creem la matriu per avaluar la prova
+matrix.conf <- table(Class=predicted.model2,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+```
+
+Encara que la predicció sigui realment bona hi ha una cosa que no m'acaba d'agradar i és que en la predicció del 'yes' genera molt mes errors. Quan tenim un cas que ens diu que pot contractar un disposit bancari, té força errors. En canvi, el 'no', és molt precís. De totes maneres, és lleugerament millor que sense 'winnow'.
+
+```{r}
+confusionMatrix(predicted.model2,test.y, dnn = c("Prediction"))
+```
+
+Amb les estadístiques veiem que el 'no' té un 0.9221 i en canvi el 'yes' 0.7168 El valor de Kappa que tenim no és molt bo. Aquest valor és una altra forma d'interpretar l'aleatorietat explicat en el punt anterior. Ens ha baixat una mica fent servir menys atributs.
+
+## Estudi del model sense eliminar neteja de dades
+
+Havíem reservat un model per a provar si millorava o empitjorava el fet d'eliminar outliers i alguns camps nulls.
+
+```{r}
+bank.data <- read.csv('bank-discret.csv', sep = ',')
+
+# separem el 70% de conjunt d'entrenament del 30% per a avaluar
+random.data <- sample(1:nrow(bank.data), 0.70 * nrow(bank.data))
+data.train <- bank.data[random.data,]
+data.test <- bank.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:16]
+train.y <- data.train[,17]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:16]
+test.y <- data.test[,17]
+
+
+model3 <- C50::C5.0(train.x, train.y, rules=TRUE, size=10,control = C5.0Control(winnow = TRUE))
+predicted.model3 <- predict(model3, test.x, type="class")
+
+matrix.conf <- table(Class=predicted.model3,Predicted=test.y)
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model3,test.y, dnn = c("Prediction"))
+```
+
+La predicció en quant a accuracy és pitjor, el valor kappa (aletorietat) també és pitjor. La predicció del 'yes' ens cau a '0.6544'. Están ben netejades les dades perquè ens perjudica al classificar tenir valors nulls i outliers.
+
+## Reducció de la dimensionalitat (PCA)
+
+Anem a reduïr encara més la dimensionalitat del dataset. Hi ha alguns atributs que potser ens fan embrutar l'arbre de decissió amb regles no necessaries
+
+Primer veiem la matriu de correlació per veure quins atributs tenen impacte amb la variable de sortida target.
+
+```{r}
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+bank.data.tmp <- bank.data
+for (colname in colnames(bank.data.tmp)) {
+  bank.data.tmp[colname] <- lapply(bank.data.tmp[colname],as.integer)
+}
+corr.mat <- cor(bank.data.tmp)
+# visualize it
+library(corrplot)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(corr.mat, method="color", col=col(200),   
+         addCoef.col = "black", 
+         tl.col="black", tl.srt=45,
+         insig = "blank", 
+         number.cex=0.5)
+```
+
+Veiem que els atributs que tenen més impacte en quant a la matriu de correlació serien (agafem > 0.07):  education, balance, housing, contact, duration, pdays, previous
+
+#### Estudi PCA (Principal Component Analysis)
+
+En l'estudi de PCA el que es vol es trobar un nombre de dimensions menor de la mostra que expliquin el mateix que la mostra total. A nivell matemàtic funciona amb el concepte de 'eigenvectors' i 'eigenvalues', que són valors que simplifiquen una matriu dient el mateix que la matriu original: [Eigenvector and Eigenvalue](https://www.mathsisfun.com/algebra/eigenvalue.html)
+
+El que fem és trobar la variànça total del conjunt de dades i intentarem reduir la dimensionalitat mantenint aquesta varinça al màxim. Per exemple, si tinguesim amb 10 dimensions un > 95% de la variança ja ens donariem per satisfets. L'elecció es realitza de manera que la primera component principal sigui la que major variància reculli; la segona ha de recollir la màxima variabilitat no recollida per la primera, i així successivament, triant un nombre que reculli un percentatge suficient de variància total.
+
+Dividirem l'estudi en les dades quantitatives (PCA, Principal Component Analysis) i mixtes (FAMD, Factor Analysis of Mixed Data) per a dades qualitatives i quantitatives. [Info](https://rpkgs.datanovia.com/factoextra/)
+
+
+##### Dades quantitatives (PCA)
+```{r}
+bank.pca <- read.csv('bank-clean-discret.csv', sep = ',')
+quantitative <-  bank.pca[,c(1,6,10,12:15)]
+
+# executem l'estudi PCA
+pca <- prcomp(quantitative, scale. = TRUE)
+
+# la funció mostra la variança de cada component 
+fviz_eig(pca, choice = c("variance"), addlabels = TRUE)
+
+# relació entre les dimensions i atributs.
+fviz_contrib(pca, choice = "var", axes = 1:4)
+
+# pve acumulada
+PVE <- 100*pca$sdev^2/sum(pca$sdev^2)
+
+plot(cumsum(PVE), type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+
+```
+
+Totes les variables continues tenen una bona aportació encara que podriem reduïr el nombre ja que amb 4 dimensions estem aportant molta informació de la mostra.
+
+En la tercera gràfica es pot veure que amb 5 dimensions tenim una variança acumulada de quasi un 80%. Podríem eliminar day, duration i campaign 
+
+```{r}
+## obetnim primer una mostra del total de forma aleatoria (hem guardat físicament aquest random per poder reproduïr el mateix i el carreguem de disc)
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+summary(bank.data)
+
+bank.data.subset <- bank.data[,c("balance","age","previous","pdays","day","y")]
+summary(bank.data.subset)
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+
+data.train <- bank.data.subset[random.data,]
+data.test <- bank.data.subset[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:5]
+train.y <- data.train[,6]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:5]
+test.y <- data.test[,6]
+
+model31 <- C50::C5.0(train.x, train.y)
+predicted.model31 <- predict(model31, test.x, type="class")
+
+
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model31 == test.y) / length(predicted.model31)))
+matrix.conf <- table(Class=predicted.model31,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model31,test.y, dnn = c("Prediction"))
+
+```
+
+La predicció no és gens bona i tenim un Kappa molt baix. Realment es troben a faltar les variables categòr
+
+##### Dades mixtes (FAMD)
+
+Com que el nostre dataset té dades categòriques i quantitatives, anem a fer l'estudi de dades mixtes amb la funció FAMD.
+
+```{r}
+mixed <- read.csv('bank-clean-discret.csv', sep = ',')
+
+res.famd <- FAMD(mixed, sup.var = 17, graph = FALSE, ncp = 40)
+
+# relació entre les dimensions i atributs.
+fviz_contrib(res.famd, choice = "var", axes = 1:40)
+
+plot(res.famd$eig[,3], type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+
+```
+
+Veiem en l'estudi que tenim 5 o 6 components que aporten moltíssim i la resta tenen un impacte similar. Anem a agafar un subconjunt del dataset que tenim guardat només amb els atributs: month, job, education, poutcome i contact.
+
+```{r}
+## obetnim primer una mostra del total de forma aleatoria (hem guardat físicament aquest random per poder reproduïr el mateix i el carreguem de disc)
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+summary(bank.data)
+
+bank.data.subset <- bank.data[,c("month","job","education","poutcome","contact","y")]
+summary(bank.data.subset)
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+
+data.train <- bank.data.subset[random.data,]
+data.test <- bank.data.subset[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:5]
+train.y <- data.train[,6]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:5]
+test.y <- data.test[,6]
+
+model4 <- C50::C5.0(train.x, train.y, rules=TRUE)
+summary(model4)
+
+predicted.model4 <- predict(model4, test.x, type="class")
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model4 == test.y) / length(predicted.model4)))
+
+```
+
+Obtenim un arbre molt més simple amb unes regles també més simples però el valor de la predicció ens ha baixar una mica.
+
+```{r}
+predicted.model4 <- predict(model4, test.x, type="class")
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model4 == test.y) / length(predicted.model4)))
+```
+
+Amb una predicció lleugerament inferior al model inicial, però no moltíssim.
+
+```{r}
+matrix.conf <- table(Class=predicted.model4,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model4,test.y, dnn = c("Prediction"))
+```
+
+El que si que ens ha perjudicat és en el valor de Kappa, on sembla que l'aletorietat és bastant pitjor
+
+```{r}
+model4 <- C50::C5.0(train.x, train.y, rules=FALSE)
+plot(model4)
+```
+
+
+******
+# Classificació: Hi ha hagut millora en capacitat predictiva, després d'aplicar PCA/SVD? A què creus que és degut?
+******
+
+Hem fet 4 estudis:
+
+* Sense PCA:
+
+  - Accuracy: 0.9124
+  - Kappa: 0.4047
+  - Prediction 'no': 0.9254
+  - Prediction 'yes': 0.6773
+
+* Amb PCA mitjançant winnowed
+
+  - Accuracy: 0.913
+  - Kappa: 0.382
+  - Prediction 'no': 0.7168
+  - Prediction 'yes': 0.9221
+  
+* Amb PCA manual mitjançant estudi dels PC:
+
+  - Accuracy: 0.9039
+  - Kappa: 0.2524
+  - Prediction 'no': 0.9107
+  - Prediction 'yes': 0.6738
+
+* Sense eliminar outliers ni valors nulls:
+
+  - Accuracy:  0.9031
+  - Kappa: 0.3437
+  - Prediction 'no': 0.9139
+  - Prediction 'yes': 0.6748
+
+
+Conclusions:
+  - Podem dir que la classificació amb PCA(winnowed) i sense PCA ens ha donat valors realment molt similars.     - Amb PCA (winnowed), hem millorat en la predicció general a causa que tenim millor predicció del 'yes'.       - Sense PCA hem obtingut bons valors i el millor valor de Kappa.
+  - La millora en la predicció aplicant PCA(winnowed) és molt petita. Això pot venir donat per el fet que necessitem moltes dimensions per a tenir una variança acumulada per sobre de 95%. No podem desfer-nos de moltes varibles.
+  
+******
+# Classificació: Altres tipus d'algoritmes
+******
+
+## Random Forest
+
+Un Random Forest és un conjunt d'arbres de decisió combinats amb bagging. A l'usar bagging, el que en realitat està passant, és que diferents arbres veuen diferents porcions de les dades. Cap arbre veu totes les dades d'entrenament. Això fa que cada arbre s'entreni amb diferents mostres de dades per a un mateix problema. D'aquesta manera, a l'combinar els seus resultats, uns errors es compensen amb altres i tenim una predicció que generalitza millor.
+
+```{r}
+
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+
+train <- bank.data[random.data,]
+test <- bank.data[-random.data,]
+
+test.x <- test[,1:16]
+test.y <- test[,17]
+
+train_rf <- randomForest(y~.,data = train, ntree = 500)
+
+predicted.model5 <- predict(train_rf,test.x)
+
+
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model5 == test.y) / length(predicted.model5)))
+matrix.conf <- table(Class=predicted.model5,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model5,test.y, dnn = c("Prediction"))
+
+```
+
+* Random Forest:
+
+  - Accuracy:  0.9108
+  - Kappa: 0.4064
+  - Prediction 'no': 0.9263
+  - Prediction 'yes': 0.6496
+
+Tenim bona predicció i Kappa però la predicció del 'no' és força baixa (0.6496) 
+
+## CART
+
+A diferència del ID3, aquest tipus d’arbre:
+
+* Mesura d’homogeneïtat i criteri d’aturada en el procés de partició i divisió de l’arbre a partir de l’índex de Gini, encara que hi ha variants que n’escullen d’altres. Aquesta mesura estableix el millor separador com el que redueix la diversitat de les diferents particions obtingudes (subarbres).
+
+* La poda es realitza de la següent forma:
+
+  * Generar diversos subarbres podats “interessants”.
+  * Obtenir estimacions de l’error de cadascun d’aquests subarbres.
+  * Escollir el subarbre que presenti la millor estimació.
+
+* Són binaris; a cada node hi ha un punt de tall (per un procediment semblant al que s’ha explicat per a trobar punts de tall en la discretització d’atributs continus) que separa en dos el conjunt d’observacions.
+
+* L’algorisme CART pot treballar amb atributs continus (tot i que les modificacions de ID3 també ho poden fer com hem pogut veure en l’exemple anterior C4.5).
+
+* Pot fer tant classificació com regressió: en el primer cas, la variable per a predir ha de ser categòrica amb un valor per a cada classe possible.
+
+
+```{r}
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+train <- bank.data[random.data,]
+test <- bank.data[-random.data,]
+
+test.x <- test[,1:16]
+test.y <- test[,17]
+
+heart.tree <- rpart(y ~ .,method="class", data=train)
+summary(heart.tree)
+
+predicted.model6 <- predict(heart.tree, newdata = test.x, type = "class")
+matrix.conf <- table(Class=test.y,Predicted=predicted.model6)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model6,test.y, dnn = c("Prediction"))
+```
+
+Obtenim una predicció molt similar, quasi del 0.91 amb un Kappa del 0.3072. La predicció del 'no' és molt bona, 0.9149 i em millorat la del yes a un valor de 0.7203
+
+* Cart:
+
+  - Accuracy:  0.91
+  - Kappa: 0.3072.
+  - Prediction 'no': 0.9149
+  - Prediction 'yes': 0.7203
+
+```{r}
+fancyRpartPlot(heart.tree, caption = NULL)
+```
+
+Aquest arbre és molt més interpretable que el de l'algoritme C5.0. CART ha realitzat l'eliminació d'atributs i només ens hem quedat amb duration, poutcome, month i contact. 
+
+* És molt important que les trucades tinguin una durada superior a 4.5 minuts. 
+* El fet que una campanya anterior hagués estat success o no és el següent camp en importància.
+
+## k-Nearest Neighbors
+
+Per finalitzar farem servir un altre mètode per classificar basat en la teoria que vam veure a clustering. El que fem és trobar valors veïns similars a partir de les distàncies dels diferents atributs, és a dir, troba similaritat de posició amb N dimensions. Hem de definir un valor de K. Aquest valor indica el nombre de veïns per a definir un nou grup o en aquest cas predir el resultat.
+
+* Farem servir la funció de RStudio (knn).
+* També normalitzarem els atributs per calcular les distancies.
+* Agafarem només els valors numèrics. Podem agafar els categòrics i passar-los a numèrics també.
+
+Preparem les dades:
+```{r}
+# Knn
+bank.data <- read.csv('bank-clean-discret.csv', sep = ',')
+
+bank.data <- bank.data[,c("poutcome","month","pdays","day","housing","duration","contact","loan","balance","y")]
+
+# separem el 70% de conjunt d'entrenament del 30% per a avaluar
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+train <- bank.data[random.data,]
+test <- bank.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- train[,1:9]
+train.y <- train[,10]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- test[,1:9]
+test.y <- test[,10]
+
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+
+# passem a numèric i normalitzem tant test(x,y) com train(x,y)
+train.x.norm <- train.x
+train.x.norm <- lapply(train.x.norm[1:9],as.integer)
+train.x.norm <- as.data.frame(lapply(train.x.norm[1:9],ni))
+
+train.y.norm <- train.y
+train.y.norm <- as.numeric(train.y.norm)
+train.y.norm[train.y.norm == 1] <- 0
+train.y.norm[train.y.norm == 2] <- 1
+
+test.x.norm <- test.x
+test.x.norm[1:9] <- lapply(test.x.norm[1:9],as.integer)
+test.x.norm[1:9] <- as.data.frame(lapply(test.x.norm[1:9],ni))
+
+test.y.norm <- test.y
+test.y.norm <- as.numeric(test.y.norm)
+test.y.norm[test.y.norm == 1] <- 0
+test.y.norm[test.y.norm == 2] <- 1
+```
+
+
+Calculem un valor optim de k. Veins propers.
+```{r}
+
+ i=1                          # declaration to initiate for loop
+ k.optm=1                     # declaration to initiate for loop
+ for (i in 1:75){ 
+     predicted.model7 <-  knn(train=train.x.norm, test=test.x.norm, cl=train.y.norm, k=i)
+     k.optm[i] <- 100*sum(predicted.model7 == test.y.norm) / length(predicted.model7)
+     k=i
+ }
+ plot(k.optm, type="b", xlab="K- Value",ylab="Accuracy level") 
+```
+
+Veint la gràfica optem per a fer servir un k entre 20 i 40
+```{r}
+predicted.model7 <- knn(train.x.norm,test.x.norm,cl=train.y.norm,k=25)
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model7 == test.y.norm) / length(predicted.model7)))
+matrix.conf <- table(Class=predicted.model7,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model7,as.factor(test.y.norm), dnn = c("Prediction"))
+```
+
+
+* k-Nearest Neighbors:
+
+  - Accuracy:  0.9059
+  - Kappa: 0.309
+  - Prediction 'no': 0.9158
+  - Prediction 'yes': 0.6560
+
+
+# Classificació: Més Conclusions
+
+* Hem fet moltes proves amb els diferents tipus d'algoritmes de classificació amb resultats molt similars. Els que han tingut millor acceptació són CART, C5.0 sense PCA, C5.0 amb PCA (winnowed).
+* En general, predim molt millor el 'no' que el 'yes'.
+* On hem tingut pijors resultats ha estat sense fer neteja de les dades (outliers i nulls).

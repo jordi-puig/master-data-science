@@ -379,7 +379,7 @@ Anem a realitzar clusters a partir d'algoritmes probabilístics amb atributs 2 a
 ```{r message= FALSE, warning=FALSE}
 seed_data.norm <- as.data.frame(lapply(seed_data[,1:7], ni))
 mclust <- Mclust(seed_data.norm[,1:2])
-
+summary(mclust)
 plot(mclust, what = "density")
 
 plot(mclust, what = "uncertainty")
