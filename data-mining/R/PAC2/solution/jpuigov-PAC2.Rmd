@@ -1,0 +1,594 @@
+---
+title: 'Mineria de dades: PAC2 - Mètodes no supervisats'
+author: "Autor: Jordi Puig Ovejero"
+date: "Abril 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 75.584-PAC-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Presentació
+Aquesta Prova d'Avaluació Continuada cobreix principalment els mòduls 5 i 6 (Mètodes d'agregació i algoritmes d'associació) del programa de l'assignatura
+
+El primer que fem es carregar les llibreries que es necessiten
+
+```{r message= FALSE, warning=FALSE}
+library(cluster)
+library(dplyr)
+library(class)
+library(purrr)
+library(ggplot2)
+library(factoextra)
+library(mclust)
+library(fpc)
+library(arules)
+```
+
+******
+# Exercici 1.1
+******
+
+## Estudi previ de les dades
+L'exercici parteix d'una mostra de dades de llavors de blat. Aquesta mostra conté 210 instàncias de 3 varietats diferents de blat: Kama, Rosa i Canadian, 70 elements cadascuna, seleccionades aleatòriament per l’experiment. Es va detectar una visualització d'alta qualitat de l'estructura del nucli intern (kernel) mitjançant una tècnica de raigs X. És no destructiu i considerablement més barat que altres tècniques d’imatge més sofisticades com la microscòpia d’escaneig o la tecnologia làser. Les imatges es van gravar en plaques KODAK de raigs X de 13x18 cm. Els estudis van ser realitzats a l'Institut d'Agrofísica de l'Acadèmia de Ciències Polonesa de Lublin.
+
+El conjunt de dades es pot utilitzar per a tasques tant de classificació com anàlisi de clústers.
+
+
+```{r message= FALSE, warning=FALSE}
+seed_data<-read.csv('seeds.csv',stringsAsFactors = FALSE)
+attach(seed_data)
+summary(seed_data)
+```
+
+Anem a veure si tenim valors null, per tracatar-los:
+
+```{r}
+colSums(is.na(seed_data))
+```
+
+No tenim valors nulls.
+
+
+
+Afegim una columna amb el noms de les llavors
+```{r message= FALSE, warning=FALSE}
+seed_data <- seed_data %>%
+  mutate(classname = case_when(
+    class == 1 ~ "Rosa",
+    class == 2 ~ "Kama",
+    class == 3 ~ "Canadian"
+  ))
+```
+
+
+```{r}
+str(seed_data)
+```
+
+
+Per construir les dades, s'han mesurat 7 paràmetres geomètrics de grans de blat:
+
+* 1. area A,
+* 2. perimeter P,
+* 3. compactness C = 4*pi*A/P^2,
+* 4. length of kernel (longitud del nucli),
+* 5. width of kernel (amplada del nucli),
+* 6. asymmetry coefficient (coeficient d’asimetria),
+* 7. length of kernel groove (longitud del solc del nucli),
+* 8. class (classe a la pertanyen, 1, 2 o 3)  
+* 9. classname (nom de la classe a la pertanyen, Rosa, Kama o Canadian)  
+
+La base de dades está ja classificada i el que farem serà treure la columna de class que identifica als tipus de llavors per a poder fer l'exercici. Ens quedem únicament amb les columnes que defineixen a cada llavor:
+
+```{r message= FALSE, warning=FALSE}
+x <- seed_data[,1:7]
+```
+
+## Execució i estudi del algoritme k-means (o centroides)
+Aquest algoritme primerament fixa un nombre de clusters (o centres de clusters) i a partir d'aquest número construeix els grups. Per a executar el mètode de k-means o centroides partim de la base que no coneixem el número òptim de clústers. Provarem amb varis centres (del 2 al 10) per veure quina aproximació és millor.
+
+Per a cada iteració obtenim:
+
+* generació dels clusters a partir del mètode d'agregació k-means 
+* silhouette - per avaluar la qualitat dels clusters trobats
+* emmagatzem la silueta mitja de la prova iésima al array 'results'
+
+```{r message= FALSE, warning=FALSE}
+d <- daisy(x) 
+results <- rep(0, 10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fit           <- kmeans(x, i)
+  y_cluster     <- fit$cluster
+  sk            <- silhouette(y_cluster, d)
+  results[i] <- mean(sk[,3])
+}
+```
+
+
+Mostrem en una gràfica els valors de la silueta mitja de cada prova per comprovar quin nombre de clusters és el millor. Com mes alt es el valor de la silueta, millor 
+
+```{r message= FALSE, warning=FALSE}
+plot(2:10,results[2:10],type="o",col="blue",pch=0,xlab="Nombre de clusters",ylab="Silueta")
+```
+
+El millor valor obtingut es de dos clusters encara que sabem per la mostra agafada que l'original té 3 classes.
+
+Un altre forma d'evaluar quin és el millor nombre de clústers és considerar el millor model amb aquestes condicions:
+
+* Ofereix la menor suma dels quadrats de les distàncies dels punts de cada grup amb respecte al seu centre (withinss). *Els elements dels grups estan junts.*
+
+* La separació més gran entre centres de grups (betweenss). *Els grups están separats.*
+
+És una idea conceptualment similar a la silueta. Una manera comú de fer la selecció del nombre de clústers consisteix a aplicar el mètode elbow (colze). És fa una selecció del nombre de clústers a partir de la inspecció de la gràfica que s'obté l'iterar amb el mateix conjunt de dades per a distints valors del nombre de clústers. Es seleccionarà el valor que és troba en el colze de la corba.
+
+```{r message= FALSE, warning=FALSE}
+resultados <- rep(0, 10)
+for (i in c(2,3,4,5,6,7,8,9,10))
+{
+  fit           <- kmeans(x, i)
+  resultados[i] <- fit$tot.withinss
+}
+plot(2:10,resultados[2:10],type="o",col="blue",pch=0,xlab="Nombre de clusters",ylab="tot.tot.withinss")
+```
+
+A partir de la corba obtinguda podem veure com a mesura que s'augmenta la quantitat de centroides, el valor de "tot.tot.withinss" disminueix, ja que la separació entre elements dels clusters es inferior. La idea és trobar un "colze". *El colze és troba on ja no es produeixen variacions importants a l'augmentar 'Nombre de clusters'.* El valor és el 3 (seria el correcte).
+
+Una altra aproximació similar, on només mostrem la distància entre els quadrats dels elements dels clusters (withinss):
+
+```{r}
+# agafem la primera iteració
+wss <- sum(kmeans(x,centers=1)$withinss)
+
+# agafem iteracions del 2 al 10
+for (i in 2:10) wss[i] <- sum(kmeans(x,centers=i)$withinss)
+
+# pintem els 10 withinss. 
+plot(1:10, wss, type="b", xlab="Number of Clusters",ylab="Within groups sum of squares")
+
+```
+
+Agafaríem també l'opció 3, ja que és el nombre més gran de clusters on la distancia entre els elements del clusters és més petita. A partir del 3  s'estabilitza moltíssim i quasi no hi ha variació entre la distancia dels elements dels grups.
+
+
+També es pot fer servir la funció kmeansruns del paquet fpc que executarà l'algoritme kmeans com un conjunt de valors i selecciona el valor del nombre de clústers que millor funcioni d'acord amb dos criteris: la silueta mitja (asw) i Calinski-Harabasz ("ch").
+
+```{r message= FALSE, warning=FALSE}
+fit_ch  <- kmeansruns(x, krange = 1:10, criterion = "ch") 
+fit_asw <- kmeansruns(x, krange = 1:10, criterion = "asw") 
+```
+
+
+Podem comprovar el valor amb el qual s'ha obtingut el millor resultat i també mostrar el resultat obtingut per a tots els valors de k usant tots dos criteris
+
+
+```{r message= FALSE, warning=FALSE}
+fit_ch$bestk
+fit_asw$bestk
+
+plot(1:10,fit_ch$crit,type="o",col="blue",pch=0,xlab="Nombre de clústers",ylab="Criteri Calinski-Harabasz")
+plot(1:10,fit_asw$crit,type="o",col="blue",pch=0,xlab="Nombre de clústers",ylab="Criteri silueta mitja")
+
+```
+
+Els resultats son molt semblants als que hem obntingut anteriorment. Amb el criteri de la silueta mitja s'obtenen entre dos i tres clústers i amb el Calinski-Harabasz s'obtenen 3.
+
+
+Anem a realitzar comparacions visuals amb el nombre de clusters que sabem hi han (3 Clusters)
+```{r message= FALSE, warning=FALSE}
+# realitzem una divisió en 3 clusters
+seed3clusters <- kmeans(x, 3)
+```
+
+Primer visualitzarem els elements amb 3 clusters:
+```{r message= FALSE, warning=FALSE}
+clusplot(x, seed3clusters$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+```
+
+Gràficament veiem que tenim elements del grup 2 que poden estar confonent-se amb els dels grups 1 i 3.
+
+
+```{r message= FALSE, warning=FALSE}
+# realitzem una divisió en 2 clusters
+seed2clusters <- kmeans(x, 2)
+```
+
+Ara visualitzem amb dos clusters:
+```{r message= FALSE, warning=FALSE}
+clusplot(x, seed2clusters$cluster, color=TRUE, shade=TRUE, labels=2, lines=0)
+```
+
+Ara compararem visualment els atributs dos a dos, amb el valor real que sabem està enmgatzemat en el camp class del dataset original.
+
+```{r message= FALSE, warning=FALSE}
+# veiem visualment la relació 'area' i 'perimeter' entre el clusters realitzats i les class que sabem que existeixen
+plot(x[c(1,2)], col=seed3clusters$cluster)
+plot(x[c(1,2)], col=seed_data$class)
+```
+
+Podem observar que l'àrea i perímetre de les llavors és molt bon indicador per a distingir les diferents classes de llavors que existeixen. Estan prou bé diferenciades encara que s'equivoca en algunes prediccions i barreja la classe del mig amb les altres dos i potser per això detectàvem dos grups en estudis previs com el de silueta. 
+
+```{r message= FALSE, warning=FALSE}
+# Ara fem el mateix amb 'lengthKernel' i 'widthKernel'
+plot(x[c(4,5)], col=seed3clusters$cluster)
+plot(x[c(4,5)], col=seed_data$class)
+```
+
+Per un altre banda, la mida del Kernel de la llavor sembla fer una bona feina també encara que també es barrejen alguns elements.
+
+Si possem nom a les llavors tenim:
+
+ - Grup 1: Rosa (es la llavor de que té el grà més gran).
+ - Grup 2: Kama (s'ubica al mig)
+ - Grup 3: Canadian (es la llavor que té el grà més petit).
+
+
+Anem a comparar com de bo ha estat el clustering realitzat els valors que hem generat amb els originals que sabem que estan ben classificades.
+
+```{r message= FALSE, warning=FALSE}
+table(seed3clusters$cluster,seed_data$class)
+```
+
+Ens permet així treure un porcentatge de la precisió del model
+
+```{r message= FALSE, warning=FALSE}
+100*(68 + 60 + 60)/(210)
+```
+
+
+Amb dos clusters:
+```{r message= FALSE, warning=FALSE}
+table(seed2clusters$cluster,seed_data$class)
+100*(59 + 56 + 0)/(210)
+
+```
+
+Es lògic que baixi tant ja que realment tenim 3 clusters.
+
+******
+# Exercici 1.2
+******
+
+## Mètode agregació jerarquica incremental (Hierarchical Agglomerative Clustering - HAC)
+
+Funciona amb l'algoritme dels veïns més propers (k-nearest neighbours) de la següent forma:
+
+* Assignem cada element al seu propi clúster, de manera que si té N elements, ara té N clústers, cadascun amb un sol element. Deixem que les distàncies (similitud) entre els clusters siguin iguals a les distàncies (similitud) entre els elements que contenen.
+
+* Es troba el parell més proper (més similar) de clústers i es combinen en un únic clúster, de manera que ara tenim un clúster menys.
+
+* Calculem distàncies (similitud) entre el nou clúster i cadascun dels clústers antics.
+
+* Es repeteix els passos 2 i 3 fins que tots els elements siguin agrupats en un sol grup de mida N.
+
+De formes de mesurar les distàncies entre grups tenim de diversos tipus. Provarem només: "average", "complete" i "ward".
+
+Abans de tot, normalitzem les dades i calculem la distància euclidiana entre els elements.
+```{r message= FALSE, warning=FALSE}
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+seed.data.norm <- as.data.frame(lapply(seed_data[,1:7], ni))
+
+# primer fem la matriu de la distància euclideana dels elements de la taula de llavors.
+seed.data.euc <- dist(seed.data.norm, method = "euclidean")
+```
+
+### Enllaç complet
+
+Estratègia de la distància màxima o similitud mínima. En aquest mètode, també conegut (complete linkage), es considera que la distància o similitud entre dos clústers cal mesurar-la atenent a elements més dispars, és a dir, la distància o similitud entre clústers ve dada, respectivament, per la màxima distància (o mínima similitud) entre components dels clústers.
+
+```{r message= FALSE, warning=FALSE}
+# fem servir hclust per a realitzar les agrupacions
+hc1 <- hclust(seed.data.euc, method = "complete")
+plot(hc1, 
+     labels = seed.data.norm$classname, 
+     main = "Complete linkage", 
+     xlab = "Llavors",
+     ylab = "",
+     cex = 0.2,
+     sub = "")
+abline(h = 1.4, col = "red")
+
+hc1.cutree <- cutree(tree = hc1, k = 3)
+tab <- table(hc1.cutree, seed_data$class)
+tab
+100*(69 + 54 + 54)/(210)
+```
+
+Amb aquest arbre agafariem entre 2,3 o 4 clusters. 
+
+El valor de la agrupació agant 3 clusters i comparan-lo amb el original es de 84.28571. 
+
+### Enllaç promig
+
+En aquesta estratègia la distància, o similitud, de l'clúster Ci amb el Cj s'obté com la mitjana aritmètica
+entre la distància, o similitud, dels elements d'aquests clústers.
+```{r message= FALSE, warning=FALSE}
+
+seed.data.norm <- as.data.frame(lapply(seed_data[,1:7], ni))
+
+# primer fem la matriu de la distància euclideana dels elements de la taula de llavors.
+seed.data.euc <- dist(seed.data.norm, method = "euclidean")
+
+hc2 <- hclust(seed.data.euc, method = "average")
+
+plot(hc2, 
+     labels = seed.data.norm$classname, 
+     main = "Average linkage", 
+     xlab = "",
+     ylab = "",
+     cex = 0.3,
+     sub = "")
+abline(h = 0.8, col = "red")
+
+hc2.cutree <- cutree(tree = hc2, k = 3)
+tab2 <- table(hc2.cutree, seed_data$class)
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab2)
+```
+
+Amb aquest arbre agafariem entre 2,3 o 4 clusters.
+Tenim una predicció dels grups d'un 89.5% d'encert, tè un porcentatge similar que amb k-means.
+
+### Mètode Ward
+
+El mètode de Ward apunta a minimitzar la variància total dins de el grup. A cada pas, es fusionen el parell de clústers amb una distància mínima entre els clústers. En altres paraules, forma grups d'una manera que minimitza la pèrdua associada amb cada grup.
+
+```{r message= FALSE, warning=FALSE}
+hc3 <- hclust(seed.data.euc, method = "ward")
+
+plot(hc3, 
+     labels = seed.data.norm$classname, 
+     main = "Ward Method", 
+     xlab = "",
+     ylab = "",
+     cex = 0.3,
+     sub = "")
+abline(h = 15, col = "red")
+
+hc3.cutree <- cutree(tree = hc3, k = 3)
+tab3 <- table(hc3.cutree, seed_data$class)
+tab3
+100*(54 + 65 + 70)/(210)
+
+```
+
+Amb el linkatge 'ward' tenim la millor agrupació on es pot veure clarament els 3 grups i tenim una precissió del 90%
+
+
+## Mètodes d'agregació probabilítics
+
+Els enfocaments dels mètodes probabilístics assumeixen una varietat de models de dades i apliquen l'estimació de màxima versemblança i els criteris de Bayes per identificar el model més probable i el nombre de grups. 
+
+
+Anem a realitzar clusters a partir d'algoritmes probabilístics amb atributs 2 a 2
+```{r message= FALSE, warning=FALSE}
+seed_data.norm <- as.data.frame(lapply(seed_data[,1:7], ni))
+mclust <- Mclust(seed_data.norm[,1:2])
+summary(mclust)
+plot(mclust, what = "density")
+
+plot(mclust, what = "uncertainty")
+
+legend_args <- list(x = "bottomright", ncol = 5)
+plot(mclust, what = 'BIC', legendArgs = legend_args, modelName = "EEI")
+plot(mclust, what = 'classification')
+
+mclust$G
+
+```
+
+Es prou evident que en totes les gràfiques tenim 3 grups i el mateix objecte del clustering ens ho diu.
+
+### BIC (Bayesian Information Criterion).
+
+Ara veiem *amb tots els atributs* fent servir el criteri BIC (Bayesian Information Criterion) per fer el clustering.
+```{r message= FALSE, warning=FALSE}
+clustBIC <- mclustBIC(seed_data.norm, modelName = "EEI")
+plot(clustBIC)
+
+```
+
+En la corva veiem que a partir de 3 clusters s'estabilitza. Per tant, estimem 3 clusters que son els que existeixen realment.
+
+## Classificació amb K-nearest Neighbors (extra)
+
+En la documentació s'ha explicat l'algoritme per clustering però la llibreria de RStudio knn ens permet fer *classificació supervisat*. Podem classificar elements nous mitjançant els elements k mes propers.  
+
+A diferencia de l'algoritme de K-means, aquí no partim de cap nombre predefinit de clusters (encara que sabem que  son 3). Tampoc obtindrem clusters sino sabrem a quina classe pertanyen elements a partir d'un altres elements.
+
+El que si hem de definir es el valor de K. Aquest valor indica el nombre de veins per a definir un nou grup o categoria.
+
+Farem servir la funció de RStudio (knn).
+També normalitzarem els atributs per calcular les distancies.
+Dividirem les dades en dos conjunts, entrenament i proba, previament com hem dit normalitzats.
+
+
+```{r message= FALSE, warning=FALSE}
+
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+
+## obetnim primer una mostra del total de forma aleatoria
+ran <- sample(1:nrow(seed_data), 0.5 * nrow(seed_data)) 
+
+
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+
+## executem la normalització sobre les 7 primeres columnes i veiem com quedan
+seed_data.norm <- as.data.frame(lapply(seed_data[,1:7], ni))
+summary(seed_data.norm)
+
+## extraiem conjunt d'entrenament amb 50% de la mostra 
+seed_train <- seed_data.norm [ran,] 
+
+## extraiem conjunt de prova amb el 50% de la mostra
+seed_test <- seed_data.norm [-ran,] 
+
+
+## extraiem la 8a columna (class) del conjunt d'entrenament que utilitzarem com 'cl' a la funció knn
+seed_target_category <- seed_data[ran,8]
+ 
+## extraeim la 8a columna (class) del conjunt de test que farem servir per a mesurar la qualitat del model obtingut
+seed_test_category <- seed_data[-ran,8]
+
+## executem la funció knn
+pr <- knn(seed_train,seed_test,cl=seed_target_category,k=5)
+ 
+## creem la matriu per avaluar la prova
+tab <- table(pr,seed_test_category)
+ 
+## funció per avaluar la qualitat del model
+accuracy <- function(x){sum(diag(x)/(sum(rowSums(x)))) * 100}
+accuracy(tab)
+
+```
+
+Tenim uns resultats prou bons. A partir de la mostra d'entrenament ha sabut classificar de forma correcta un % molt elevat dels elements de test. 
+
+
+******
+# Exercici 2.1
+******
+
+## Estudi previ i preparació de les dades
+
+```{r message= FALSE, warning=FALSE}
+
+# carreguem les dades i strings els factoritzem 
+lastfm.data<-read.csv('lastfm.csv',stringsAsFactors = FALSE)
+
+# veiem el nombre de registres que tenim
+str(dim(lastfm.data)[1])
+
+# veiem l'estructura de les dades
+str(lastfm.data)
+
+summary(lastfm.data)
+
+```
+
+El conjunt de les dades es composa de 289955 registres amb 4 columnes:
+
+* user: es un enter que identifica al usuari de l'escolta
+* artist: cadena de chars que identifica el grup escoltat
+* sex: char que identifica el sexe amb valors f/m
+* country: cadena de chars que identifica el país de procedencia del usuari
+
+
+### Tractament de valors buits
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(lastfm.data))
+```
+
+
+No tenim valors buits, per tant no hem de tractar aquests valors.
+
+
+### Discretitzem les dades i les carreguem com a transaccions
+```{r message= FALSE, warning=FALSE}
+# discretitzem les dades 
+for (i in 1:4) {
+  lastfm.data[,i] <- as.factor(lastfm.data[,i])
+}
+
+summary(lastfm.data)
+```
+
+### Estudi de la repetició del camp artist
+```{r message= FALSE, warning=FALSE}
+
+# transformem el data en una llista dels artistes agrupats per els usuaris, es a dir, tenim els artistes que escolta cada usuari
+
+# contem el número d'usuaris diferents i ens surten 15000. Tindrem 15000 transaccions
+users <- lastfm.data[,"user"]
+n_distinct(users)
+
+artist <- split(x=lastfm.data[,"artist"],f=lastfm.data$user)
+
+# trasformem el data com a transactions. Cada transacció es un usuari i els artistes que ha escoltat
+artist.transactions <- as(artist,"transactions")
+itemFrequencyPlot(artist.transactions, support = .07, cex.names = .6, col = rainbow(4))
+
+
+
+```
+
+
+Mostrem els artistes que mes es repeteixen. En concret estem mostrant aquells que tenen un suport o freqüencia >= 0.07. Si tenim 15000 transaccions, estem mostrant x >= 15.000 * 0.7, es a dir aquells que apareixen com a mínim 1050 vegades.
+
+Els artistes que més es repeteixen són Coldplay, Radiohead i The Beatles.
+
+Com a curiositat anem a fer la mateixa comprobació però separant per sexe
+
+```{r}
+male <- subset(lastfm.data, lastfm.data$sex == "m")
+artist <- split(x=male[,"artist"],f=male$user)
+male.transactions <- as(artist,"transactions")
+itemFrequencyPlot(male.transactions, support = .08, cex.names = .6, col = rainbow(4))
+
+female <- subset(lastfm.data, lastfm.data$sex == "f")
+artist2 <- split(x=female[,"artist"],f=female$user)
+female.transactions <- as(artist2,"transactions")
+itemFrequencyPlot(female.transactions, support = .03, cex.names = .6, col = rainbow(4))
+
+```
+
+Els 3 primers continuan sent els mateixos.
+
+## Aplicació d'algoritme apriori 
+Si llancem l'algoritme "apriori", generarem directament un set de regles amb diferent suport, confiança i lift. 
+
+* El *support* indica quantes vegades s'han trovat les regles {lsh => rhs} en el dataset, com més alt millor. Es la "popularitat" d'un conjunt d'elements del dataset. On {lsh => rhs} indica que si s'escolta lsh, s'escolta rhs.
+
+* La *confidence* ens parla de la probabilitat que s'escolti {rhs} si s'escolta {lhs} (lhs => rhs / lhs).
+
+* El *lift* és un paràmetre que ens indica quan d'aletorietat hi ha a les regles. Un lift de 1 o menys ens indica que la regla és completament fruit de l'atzar. El lift ens diu eb una regla, com es produeix la regla en funció dels elements de la regla (support(lhs => rhs) / support(lhs) * support(rhs)).
+
+Generem les regles per un support mínim de 0.01, confidence mínim de 0.4 i lift mínim de 3
+
+```{r message= FALSE, warning=FALSE}
+artist_rules <- apriori(artist.transactions, parameter = list(support = 0.01, confidence = 0.4))
+
+inspect(head(sort(artist_rules, by = "confidence"), 10))
+```
+
+Amb aquesta ordenació per *confidence*, tenim una probabilitat alta que si escoltan "the killers" + "oasis", escoltin "coldplay". Es un exemple, el mateix passa amb la resta de les 9 regles mostrades. Si algú escoltés "keane" li recomanaria en la seva llista de reproducció "coldplay". En tots els casos el lift es molt superior a 1, per tant no hi ha aletorietat en els resultats.
+
+
+```{r message= FALSE, warning=FALSE}
+inspect(head(sort(artist_rules, by = "support"), 10))
+```
+
+Si ordenem per support, veiem les regles que més cops s'han produït a tot el conjunt. La regla escoltar "the killers" => "coldplay" s'ha produït mes de 600 cops. Una altre repetició de regla alta és "bob dylan" => "the beatles". Aquestes regles tenen a més una probabilitat condicionada (confidence) relativament alta  > 40%
+
+Podem generar altres regles que impliquin un mínim de dos elements del lhs:
+
+```{r message= FALSE, warning=FALSE}
+artist_rules2 <- apriori(artist.transactions, parameter = list(support = 0.01, confidence = 0.4, minlen=3))
+
+inspect(head(sort(artist_rules2, by = "confidence"), 10))
+
+inspect(head(sort(artist_rules2, by = "support"), 10))
+
+inspect(head(sort(artist_rules2, by = "lift"), 10))
+```
+
+La regla "coldplay + the beatles => radiohead" és la que més cops es produeix, més freqüencia (support) i la probabilitat més alta es "oasis + the killers => coldplay". 
+
+Ordenat per el lift tenim "pink floyd + the doors => led zeppelin". Aquesta regla es la que té una aletorietat més  baixa. Els elements lhs i rhs están prou estesos al dataset. Si tinguessim una aletorietat per sota d'1 diria que els elements de la regla lhs i rhs es produeixen força cops en el dataset, molt més que la repetició de la regla, i que la regla s'ha produït de forma fortuita per aquest motiu

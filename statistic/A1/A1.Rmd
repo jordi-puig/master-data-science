@@ -1,0 +1,987 @@
+---
+title: 'Estadística Avançada'
+author: "Autor: Jordi Puig Ovejero"
+date: "Març 2021"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+Carrega de les llibreries que es necessiten 
+```{r message= FALSE, warning=FALSE}
+library(dplyr)
+library(base)
+library(matrixStats)
+library(stringr)
+library(ggplot2)
+library(lubridate)
+library(eeptools)
+library(psych)
+library(corrplot)
+library(factoextra)
+library(ggbiplot)
+```
+
+******
+# Càrrega del fitxer
+******
+
+El fitxer on es troba el dataset és, **fifa_raw.csv**:
+
+Carreguem les dades i fem un summary de les dades que ens demana l'activitat.
+Els elements categòrics estan carregats com a *factor* des d'un inici. L'encoding com a UTF-8 ja que tenim accents i altres caràcters que requereixen aquesta codificació.
+
+```{r message= FALSE, warning=FALSE}
+fifa <- read.csv('fifa_raw.csv',stringsAsFactors = TRUE, sep = ',', encoding="UTF-8")
+fifa.tmp <- fifa[,c('Name', 'Nationality', 'Club_Joining', 'Contract_Expiry', 'Rating', 'Height', 'Weight', 'Preffered_Foot', 'Birth_Date', 'Age', 'Work_Rate')]
+
+attach(fifa) # ens permet referenciar les columnes de fifa sense haver d'especificar el dataset.
+
+summary(fifa.tmp)
+```
+
+
+Contem les files i columnes que tenim.
+```{r message= FALSE, warning=FALSE}
+ncol(fifa)
+nrow(fifa.tmp)
+ncol(fifa.tmp)
+```
+
+I mostrem els valors NA per cada atribut.
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(fifa.tmp))
+```
+Finalment fem un head dels atributs a tractar.
+
+```{r}
+head(fifa.tmp)
+```
+
+
+Amb una ràpida ullada podem dir que: 
+
+* Nombre de registres: 17588
+* Nombre d'atributs totals: 54
+* Nombre d'atributs: 11
+* Tenim valors NA a Contract_Expiry, Height i Weight.
+* Preffered_Foot és un categòric ocult com a quantitatiu.
+* Les dades numèriques sembla que están en el format desitjat excepte Height. Separació de decimals amb el punt.
+* Les dates están com a categòriques, les haurem de canviar i el mateix passa amb el camp age, height o weight.
+* A Weight tenim dades en kilograms i grams.
+* A Height tenim dades en centimetres i metres.
+
+
+## Definició dels atributs
+
+* 1 - Name (Nom del jugador)
+* 2 - Nationality (Nacionalitat del jugador)
+* 3 - Club_Joining (Data que va començar al club)
+* 4 - Contract_Expire (Any finalització del contracte)
+* 5 - Rating (Valoració global del jugador, entre 0 i 100)
+* 6 - Height (Altura)
+* 7 - Weight (Pes)
+* 8 - Preffered_Foot (Peu preferit)
+* 9 - Birth_Date (Data de naixement)
+* 10 - Age (Edat)
+* 11 - Work_Rate (valoració qualitativa en termes d’atac-defensa)
+
+*****
+# Verificar duplicació de registres
+*****
+
+Anem a eliminar els registres duplicats segons el camp ID i ens quedarem aquells que tinguin menys valors NA.
+
+```{r}
+# busquem els duplicats i els afegim a una columna nova com a TRUE si hi ha duplicat i FALSE altrament
+fifa$duplicated = duplicated(fifa$ID) 
+
+# agafem el subconjunt dels que son duplicats
+subset(fifa, duplicated=="TRUE") 
+
+# sembla que no en tenim però farem una altre comprovació
+
+# creem una variable amb els valors de ID
+ID <- fifa$ID
+# creem una taula amb les ocurrencies de cada element ordenades
+table <- as.data.frame(table(ID))
+head(sort(table$Freq,decreasing=TRUE), n = 5)
+```
+
+Concluïm doncs que no tenim duplicacions en la variable ID.
+
+*****
+# Normalització de les dades quantitatives
+*****
+
+Anem a normalitzar les dades quantitatives.
+
+## Rating
+
+Comprovarem que:
+
+* la variable sigui quantitativa.
+* si té decimals que el símbol sigui el punt.
+* que es trobi normalitzada dins dels valors 0 - 100.
+
+```{r}
+class(fifa$Rating)
+summary(fifa$Rating)
+head(fifa$Rating)
+```
+Amb el class, veiem que el valor és un Integer. És un quantitatiu discret. Amb el summary que hem fet veiem que està correctament normalitzada ja que el valor màxim és el 94 i el mínim 45.
+
+## Height
+
+Comprovarem que:
+
+* la variable sigui quantitativa.
+* expressada en cm amb 3 dígits sense decimals
+* sense el símbol de cm o m.
+
+```{r}
+class(fifa$Height)
+head(fifa$Height)
+```
+La variable al ser string s'ha carregat com a Factor. Abans de transformar-la a numérica anem a eliminar el string ' m' i ' cm'. El valors en metres els passarem a cm i finalment fem un cast a Integer.
+
+```{r}
+
+# eliminem el string (' m')
+fifa$Height <- str_replace(fifa$Height, " m", "")
+
+# eliminem el string (' cm')
+fifa$Height <- str_replace(fifa$Height, " cm", "")
+
+# passem la coma a punt i convertim en numèric
+fifa$Height <- str_replace(fifa$Height, ",", ".")
+
+fifa$Height <- as.numeric(fifa$Height)
+class(fifa$Height)
+summary(fifa$Height)
+
+# els valors menors de 5 els mmultipliquem per 100 per passar de cm a metres (dono per fet que els valors menors de 5 son cm i els més grans son metres)
+fifa$Height <- ifelse(fifa$Height <= 5, fifa$Height * 100, fifa$Height)
+
+# fem un summary i head per veure que tot correcte
+summary(fifa$Height)
+head(fifa$Height)
+```
+Si revisem visualment amb un boxplot:
+
+```{r}
+ggplot(data = fifa ,aes(x="",y=Height))+geom_boxplot()
+```
+
+Veiem que la conversió ha estat correcte i els extrems que tenim són totalment vàlids com a mesures d'alçada.
+
+## Weight
+
+Comprovarem que:
+
+* la variable sigui quantitativa.
+* expressada en kg amb 2 dígits sense decimals
+* sense el símbol de kg.
+
+
+```{r}
+class(fifa$Weight)
+head(fifa$Weight)
+```
+Fent una primera ullada veig que la situació és similar que amb Weight. Estan com a factor (ja que els string els hem carregat com a tal)i tenim valors amb gr. i kg.
+
+```{r}
+# eliminem el string (' gr')
+fifa$Weight <- str_replace(fifa$Weight, " gr", "")
+
+# eliminem el string (' kg')
+fifa$Weight <- str_replace(fifa$Weight, " kg", "")
+
+# passem la coma a punt i convertim en numèric
+fifa$Weight <- str_replace(fifa$Weight, ",", ".")
+fifa$Weight <- as.numeric(fifa$Weight)
+
+# els valors menors de 5 els dividim per 1000 per passar de gr a kg (dono per fet que els valors > 1000 son cm i els més petits son metres)
+fifa$Weight <- ifelse(fifa$Weight > 1000, fifa$Weight / 1000, fifa$Weight)
+
+# eliminem els decimals truncant
+fifa$Weight <- round(fifa$Weight, 0)
+
+# fem un summary i head per veure que tot correcte
+summary(fifa$Weight)
+head(fifa$Weight)
+```
+
+```{r}
+ggplot(data = fifa ,aes(x="",y=Weight))+geom_boxplot()
+```
+
+*****
+# Normalització de les dades qualitatives
+*****
+
+## Name i Nationality
+
+Comprovarem que:
+
+* la variable sigui qualitativa.
+* sense espais abans o després del seu valor.
+* majúscules a la seva primera lletra de cada paraula.
+
+```{r}
+class(fifa$Name)
+head(fifa$Name)
+
+class(fifa$Nationality)
+head(fifa$Nationality)
+```
+Les dades són qualitatives. Ara eliminem el primers i els darrers espais en blanc si hi han.
+
+```{r}
+fifa$Name <- trimws(fifa$Name)
+fifa$Nationality <- trimws(fifa$Nationality)
+```
+
+Per posar només la primera lletra de cada paraula a majúscula, primer posem totes a minúscules i després la primera de cada paraula a majúscula.
+
+```{r}
+# passem totes les lletres a lowercase
+fifa$Name <- tolower(fifa$Name)
+fifa$Nationality <- tolower(fifa$Nationality)
+
+# creem una funció per passar la primera lletra de cada  a uppercase fem servir la funció str_to_title
+fifa$Name <- str_to_title(fifa$Name)
+fifa$Nationality <- str_to_title(fifa$Nationality)
+
+# revisem que hagi anat tot bé
+summary(fifa$Name)
+head(fifa$Name, 15)
+
+summary(fifa$Nationality)
+head(fifa$Nationality, 15)
+
+# convertim a factor els dos atributs
+fifa$Name <- as.factor(fifa$Name)
+fifa$Nationality <- (fifa$Nationality)
+```
+
+## Preffered_Foot
+
+Comprovarem que:
+
+* la variable sigui qualitativa.
+* els valors actuals d’1 i 2 han de ser els valors Left i Right respectivament.
+
+```{r}
+class(fifa$Preffered_Foot)
+```
+Com es un valor numèric, el convertim a factor i veiem quin valors tenim
+
+```{r}
+fifa$Preffered_Foot <- as.factor(fifa$Preffered_Foot)
+summary(fifa$Preffered_Foot)
+```
+Fem les conversions adhients.
+
+```{r}
+# si es 1 Left, altrament Right
+fifa$Preffered_Foot <- ifelse(fifa$Preffered_Foot == "1", "Left", "Right")
+# convertim a factor
+fifa$Preffered_Foot <- as.factor(fifa$Preffered_Foot)
+summary(fifa$Preffered_Foot)
+```
+
+## Work_Rate
+
+Comprovarem que:
+
+* la variable sigui qualitativa.
+* es basa en la combinació de dos d’aquestes tres categories: Low, Medium i High.
+
+```{r}
+class(fifa$Work_Rate)
+head(fifa$Work_Rate)
+levels(fifa$Work_Rate)
+```
+Efectivament hi han algun level del factor que no està format per les paraules completes. Anem a modificar-ho.
+
+```{r}
+fifa$Work_Rate <- str_replace(fifa$Work_Rate, "Hig / Med", "High / Medium")
+fifa$Work_Rate <- str_replace(fifa$Work_Rate, "Med / Med", "Medium / Medium")
+fifa$Work_Rate <- as.factor(fifa$Work_Rate)
+levels(fifa$Work_Rate)
+```
+******
+# Possibles inconsistències i variables tipus data
+******
+
+## Club_Joining
+
+Comprovarem que:
+
+* la variable Club_Joining està en el rang dels anys 1990 a 2017. Si no es compleix, mostrar número de registre, Name i Club_joining.
+
+```{r}
+class(fifa$Club_Joining)
+```
+No es data l'anem a transformar en el format.
+
+```{r}
+# mostrem el format inicial dels factor
+head(fifa$Club_Joining, 15)
+
+fifa$Club_Joining <- as.Date(fifa$Club_Joining, format="%m/%d/%Y")
+summary(fifa$Club_Joining)
+```
+Les varibles están entre 1991 i 2017 excepte una que es NA. Anem a veure quina es.
+
+```{r}
+wrong_data <- subset(fifa,is.na(Club_Joining)) 
+wrong_data[,c("ID","Name", "Club_Joining")]
+```
+
+## Contract_Expiry >= Club_Joining?
+
+Comprovarem que:
+
+* la variable Contract_Expiry >= Club_Joining. Si no es compleix, mostrarem número de registre, Name, Club_joining i Contract_Expiry.
+
+```{r}
+# mostrem el format inicial dels factor i veiem que només està l'any
+head(fifa$Contract_Expiry, 15)
+
+# agafem l'any del club_joining
+fifa$club_joining_year <- format(fifa$Club_Joining, format = "%Y")
+
+# passem a integer
+fifa$Club_Joining_Year <- as.integer(fifa$club_joining_year)
+head(fifa$Club_Joining_Year)
+
+# passem a integer el Contract_Expiry
+fifa$Contract_Expiry <- as.integer(fifa$Contract_Expiry)
+
+# agafem els registres que l'any de Club_Joining > Contract_Expiry
+wrong_data <- subset(fifa,Club_Joining_Year > Contract_Expiry) 
+wrong_data[,c("ID","Name", "Club_Joining")]
+
+# esborrem la columna temporal que hem creat
+fifa$Club_Joining_Year <- NULL
+
+# tornem a deixar Contract_Expiry com a Factor
+fifa$Contract_Expiry <- as.factor(fifa$Contract_Expiry)
+```
+
+No hi ha cap registre on la data de Contract_Expiry < Club_Joining.
+
+## Birth_Date. Revisar si l’edat correspon a la data de naixement
+
+Comprovarem que:
+
+* la variable Age sigui de tipus integer.
+* la variable Age a la data 1/1/2017 correspon a la calculada amb Birth_Date. Si no es compleix, modifiquem l'edat en funció de la data de naixement.
+
+```{r}
+# la variable Age es integer.
+class(fifa$Age)
+
+# veiem com és Birth_Date
+head(fifa$Birth_Date)
+
+# passem a Data
+fifa$Birth_Date <- as.Date(fifa$Birth_Date, format="%m/%d/%Y")
+head(fifa$Birth_Date)
+class(fifa$Birth_Date)
+
+# creem la variabla temporal amb la data de càlcul de l'edat
+tmp.data <- as.Date('1/1/2017', format="%d/%m/%Y")
+tmp.data
+
+# càlculem l'edat des de la data '1/1/2017'
+fifa$age.tmp <-age_calc(fifa$Birth_Date, enddate = tmp.data, units = "years")
+head(fifa$age.tmp)
+
+# necessitem truncar els anys calculats
+class(fifa$age.tmp)
+
+# veiem els primer elements de les dues columnes
+head(fifa[,c("Age","age.tmp", "Birth_Date")])
+```
+
+Veient el elements comprovem que la variable Age no té l'edat del jugador en la data 1-1-2017. Sembla que s'hagi agafat la mostra en una altre data posterior al 1-1-2017. Anem  a arreglar-ho.
+
+```{r}
+# passem a integer i així eliminem els decimals.
+fifa$age.tmp <- as.integer(fifa$age.tmp)
+head(fifa$age.tmp)
+
+# substituim els valors inicials per els calculats.
+fifa$Age <- fifa$age.tmp
+
+# esborrem la columna temporal.
+fifa$age.tmp <- NULL
+
+# ja tenim l'edat correcte.
+head(fifa$Age)
+```
+
+******
+# Valors atípics
+******
+
+Anem a revisar els valors atípics de Height i Weight encara que ja tenim una petita idea a partir d'un apartat previ.
+
+## Outliers a Height
+
+```{r}
+summary(fifa$Height)
+```
+Fent un summary veiem que els valor màxim es de 207cm. i el mínim 155cm. Els dos són dos valors molt vàlids. També tenim 3 NA que ja els resoldrem més endavant.
+
+Per a trobar valors extrems anem a aplicar la idea dels IQR (interquartile ranges):
+
+* [referència1:](http://www.mathwords.com/o/outlier.htm)
+
+* [referència2:](http://r-statistics.co/Outlier-Treatment-With-R.html)
+
+Per a una determinada variable contínua, els outliers són aquelles observacions que es troben fora de 1.5 * IQR, on IQR, el "Inter Quartile Range" és la diferència entre el Q3 i el Q1:
+
+
+* Interquartile range, IQR = Q3 - Q1
+* lower = Q1 - 1.5 * IQR 
+* Upper = Q3 + 1.5 * IQR
+
+Creem una funció que ens digui els límits dels valors atípics de la nostre mostra.
+
+```{r message= FALSE, warning=FALSE}
+
+outliersLimits <- function(x) {
+    limits <- c("above", "under")
+    limits$above <- quantile(x, 0.75, type=6) + 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+    limits$under <- quantile(x, 0.25, type=6) - 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+  return(limits)
+}
+
+# Eliminem el NA ja que no ens serveixen per a calcular els límits.
+
+Height.clean <- na.omit(fifa$Height)
+
+Height.limits <- outliersLimits(Height.clean)
+
+paste("Límit inferior:", Height.limits$under)
+paste("Límit superior:", Height.limits$above)
+```
+Segons el càlcul el límit de inferior seria 161 (mínim de la mostra és 155.0) i el límit superior 201 (màxim de la mostra és 207.0).
+
+
+Anem a mostrar amb el BoxPlot on podem veure en forma de punts, els valors superiors a 201 i inferiors a 161, que hem calculat.
+
+```{r}
+ggplot(data = fifa ,aes(x="",y=Height))+geom_boxplot()
+```
+
+Com a exercici anem a esborrar aquests valors i mostrar altre cop el boxplot però realment no vaig a eliminar aquests valors ja que són valors perfectament vàlids en alçades de jugadors.
+
+
+```{r}
+fifa.nooutliers <-subset(fifa, Height >= Height.limits$under)
+fifa.nooutliers <-subset(fifa.nooutliers, Height <= Height.limits$above)
+
+ggplot(data = fifa.nooutliers,aes(x="",y=Height))+geom_boxplot()
+
+```
+
+Veiem el bloxpot sense els outliers de Height.
+
+## Outliers a Weight
+
+Anem a fer el mateix exercici però amb Weight.
+
+```{r}
+summary(fifa$Weight)
+
+# Eliminem els NA.
+
+Weight.clean <- na.omit(fifa$Weight)
+
+Weight.limits <- outliersLimits(Weight.clean)
+
+paste("Límit inferior:", Weight.limits$under)
+paste("Límit superior:", Weight.limits$above)
+```
+En aquest cas el límit superior és de 94.77kg. i el límit inferior 56.32kg.
+
+Mostrem els outliers amb el boxplot. Son els que es veuen un cop acaben les líneas i començen els punts.
+
+```{r}
+ggplot(data = fifa ,aes(x="",y=Weight))+geom_boxplot()
+```
+
+Vaig a veure quins són els jugadors que están en aquests outliers.
+
+```{r}
+fifa.outliers.under <-subset(fifa, Weight < Weight.limits$under)
+fifa.outliers.above <-subset(fifa.nooutliers, Weight > Weight.limits$above)
+
+
+df.under <-fifa.outliers.under[order(fifa.outliers.under$Weight),]
+head(df.under[,c("Name","Weight")], 5)
+
+df.above <-fifa.outliers.above[order(fifa.outliers.above$Weight, decreasing = TRUE),]
+head(df.above[,c("Name","Weight")], 5)
+
+```
+Fent unes comprovacions a internet he comprovat que els valors outliers-superiors són valors correctes. Els jugadors tenen aquest pes. Amb els inferiors, els extrems, per exemple, Julius Kade amb 48.11kg. o Abdulmajeed Al Mutairi amb 49.55kg si que sembla un error d'introducció de la dada però potser quan es van extreure les dades tenien aquest pes. No són outliers molt extrems que podem deliberadament esborrar.
+
+
+******
+# Imputació de valors
+******
+
+Tenim valors NA's a les variables Height i Weight. Anem a realitzar imputació de valors mitjançant predicció dels valors que no tenim a partir d'un model de regressió. Per a predir la variable Height farem servir com a covariables la dada de Weight i per a predir les de Weight farem servir la de Height.
+
+
+## Height
+
+```{r}
+lineal.model <- lm(Height ~ Weight, data= fifa)
+I <- is.na(Height)
+prediction <- predict(lineal.model, newdata = fifa[I, ])
+prediction
+```
+Amb la predicció que hem realitzat hem imputat els valors arrodonint 179, 186, 196, per a els registres 2,6,9 respectivament. Anem a afegir-los al dataset.
+
+```{r}
+fifa$Height[2] <- round(179, 0)
+fifa$Height[6] <- round(186, 0)
+fifa$Height[9] <- round(196, 0)
+```
+
+Mostrem la imputació (Height) a partir de la variable explicativa (Weight)
+
+
+```{r}
+cat("Imputació registre 2:",fifa$Height[2] , "cm. - Variable explicativa: " , fifa$Weight[2], "kg\n")
+
+cat("Imputació registre 6:",fifa$Height[6] , "cm. - Variable explicativa: " , fifa$Weight[6], "kg\n")
+
+cat("Imputació registre 9:",fifa$Height[9] , "cm. - Variable explicativa: " , fifa$Weight[9], "kg")
+```
+Observem que la imputació de l'alçada és en funció del pes. Com més alt pressuposem més kilograms.
+
+  
+## Weight
+
+```{r}
+lineal.model <- lm(Weight ~ Height, data= fifa)
+I <- is.na(Weight)
+prediction <- predict(lineal.model, newdata = fifa[I, ])
+prediction
+```
+Amb la predicció que hem realitzat hem imputat els valors 78.8, 85.06, 78.8, per a els registres 1,5,7 respectivament. Anem a afegir-los al dataset.
+
+```{r}
+fifa$Weight[1] <- round(78.8, 0)
+fifa$Weight[5] <- round(85.1, 0)
+fifa$Weight[7] <- round(78.8, 0)
+```
+
+Ens queda doncs aquesta imputació (Weight) amb la variable explicativa (Height)
+
+```{r}
+cat("Imputació registre 1:",fifa$Weight[1] , "kg. - Variable explicativa: " , fifa$Height[1], "cm\n")
+
+cat("Imputació registre 5:",fifa$Weight[5] , "kg. - Variable explicativa: " , fifa$Height[5], "cm\n")
+
+cat("Imputació registre 7:",fifa$Weight[7] , "kg. - Variable explicativa: " , fifa$Height[7], "cm")
+```
+
+També veiem que la predicció del pes va en funció (dependencia lineal) de l'alçada.
+
+
+******
+# Estudi descriptiu de les variables quantitatives.
+******
+
+En aquest estudi anem a mostrar tant la tendència central com la dispersió de mesures d'estadística robusta i no robusta. Les mesures robustes són més ressistents als efectes dels valors atípics. 
+
+* Tendencia central:
+
+    * Mitjana aritmètica (no-robust): no esbiaixat però molt afectat per els atípics.
+    * Mediana (robust): molt fiable per a la tendència central.
+    * Mitjana-retallada: eliminem un % de outliers i calculem la mitjanana aritmètica.
+    * Mitjana-retallada (winsoritzada): els valors eliminar són substituïts per altres que no generin tanta dispersión en les dades i per tant tendència central més reals.
+
+
+Crearem un dataset buït per enregistrar els valors.
+    
+```{r}
+# calculem les mesures de tendència central per a Height
+height.mean <- mean(fifa$Height)
+height.median <- median(fifa$Height)
+height.trim <- mean(fifa$Height, trim=0.05)
+height.trim.winsor <- winsor.mean(fifa$Height, trim=0.05)
+
+centraltendency.height.row <- c(height.mean, height.median, height.trim, height.trim.winsor)
+centraltendency.height.row
+
+
+# calculem les mesures de tendència central per a Weight
+weight.mean <- mean(fifa$Weight)
+weight.median <- median(fifa$Weight)
+weight.trim <- mean(fifa$Weight, trim=0.05)
+weight.trim.winsor <- winsor.mean(fifa$Weight, trim=0.05)
+
+centraltendency.weight.row <- c(weight.mean, weight.median, weight.trim, weight.trim.winsor)
+
+centraltendency.weight.row
+
+# calculem les mesures de tendència central per a Age
+age.mean <- mean(fifa$Age)
+age.median <- median(fifa$Age)
+age.trim <- mean(fifa$Age, trim=0.05)
+age.trim.winsor <- winsor.mean(fifa$Age, trim=0.05)
+
+centraltendency.age.row <- c(age.mean, age.median, age.trim, age.trim.winsor)
+centraltendency.age.row
+
+# calculem les mesures de tendència central per a Rating
+rating.mean <- mean(fifa$Rating)
+rating.median <- median(fifa$Rating)
+rating.trim <- mean(fifa$Rating, trim=0.05)
+rating.trim.winsor <- winsor.mean(fifa$Rating, trim=0.05)
+
+centraltendency.rating.row <- c(rating.mean, rating.median, rating.trim, rating.trim.winsor)
+
+# concatenem els vectors dels càlculs per a cada atribut
+vectors <- rbind(as.vector(centraltendency.height.row), as.vector(centraltendency.weight.row), as.vector(centraltendency.age.row),as.vector(centraltendency.rating.row))
+
+# construïm el dataset
+df.centraltendency <- as.data.frame(vectors)
+
+# afegim el header names
+colnames(df.centraltendency)<- c('Mean', 'Median', 'Trim', 'Trim.Windsor')
+
+# afegim row names
+rownames(df.centraltendency)<- c('Height', 'Weight', 'Age', 'Rating')
+
+df.centraltendency
+
+```
+
+Com podem observar els valors de la tendència central en els 4 atributs són molt similars. Això es deu a que no tenim uns valors atípics o outliers molt grans.
+
+
+* Dispersió:
+
+    * Desviació estandard (no-robust): afectat per els atípics.
+    * RIC - El rang interquartílic (robust): diferència entre el Q3 (percentil 75 %) i el Q1 (percentil 25 %) de les dades. El tamany de la caixa boxplot.
+    * DAM - Desviació absoluta respecte de la mediana (robust): semblant a la desviació standard però fa servir la mediana. 
+    
+
+```{r}
+# calculem les mesures de dispersió per a Height
+height.sdev <- sd(fifa$Height)
+height.ric <- IQR(fifa$Height)
+height.ram <- mad(fifa$Height)
+
+dispersion.height.row <- c(height.sdev, height.ric, height.ram)
+dispersion.height.row
+
+
+# calculem les mesures de dispersió per a Weight
+weight.sdev <- sd(fifa$Weight)
+weight.ric <- IQR(fifa$Weight)
+weight.ram <- mad(fifa$Weight)
+
+dispersion.weight.row <- c(weight.sdev, weight.ric, weight.ram)
+dispersion.weight.row
+
+# calculem les mesures de dispersió per a Age
+age.sdev <- sd(fifa$Age)
+age.ric <- IQR(fifa$Age)
+age.ram <- mad(fifa$Age)
+
+dispersion.age.row <- c(age.sdev, age.ric, age.ram)
+dispersion.age.row
+
+# calculem les mesures de dispersió per a Age
+age.sdev <- sd(fifa$Age)
+age.ric <- IQR(fifa$Age)
+age.ram <- mad(fifa$Age)
+
+dispersion.age.row <- c(age.sdev, age.ric, age.ram)
+dispersion.age.row
+
+# calculem les mesures de dispersió per a Rating
+rating.sdev <- sd(fifa$Rating)
+rating.ric <- IQR(fifa$Rating)
+rating.ram <- mad(fifa$Rating)
+
+dispersion.rating.row <- c(rating.sdev, rating.ric, rating.ram)
+
+# concatenem els vectors dels càlculs per a cada atribut
+vectors <- rbind(as.vector(dispersion.height.row), as.vector(dispersion.weight.row), as.vector(dispersion.age.row), as.vector(dispersion.rating.row))
+
+# construïm el dataset
+df.dispersion <- as.data.frame(vectors)
+
+# afegim el header names
+colnames(df.dispersion)<- c('SDEV', 'IRC', 'DAM')
+
+# afegim row names
+rownames(df.dispersion)<- c('Height', 'Weight', 'Age','Rating')
+
+df.dispersion
+
+```    
+
+Anem a comprovar la robustesa del IRC i DAM i la no-robustesa de la desviació estandard.  Modificarem un registre amb valors atípics per a Age, Weight i Height
+
+```{r}
+# mostrem les dades del primer registre
+head(fifa, 1)
+
+# treballarem sobre una còpia
+fifa.copy <- fifa
+
+# canviem el valor del Height x 10
+fifa.copy[1,'Height']
+fifa.copy[1,'Height'] <- fifa.copy[1,'Height'] * 10
+fifa.copy[1,'Height']
+
+# canviem el valor de Weight x 10
+fifa.copy[1,'Weight']
+fifa.copy[1,'Weight'] <- fifa.copy[1,'Weight'] * 10
+fifa.copy[1,'Weight']
+
+# canviem el valor de Age x 10
+fifa.copy[1,'Age']
+fifa.copy[1,'Age'] <- fifa.copy[1,'Age'] * 10
+fifa.copy[1,'Age']
+```
+
+
+Ara mostrem els boxplot i veurem clarament els outliers que hem generat.
+
+```{r}
+# Height
+ggplot(data = fifa.copy ,aes(x="",y=Height))+geom_boxplot()
+
+# Weight
+ggplot(data = fifa.copy ,aes(x="",y=Weight))+geom_boxplot()
+
+# Age
+ggplot(data = fifa.copy ,aes(x="",y=Age))+geom_boxplot()
+```
+
+
+Finalement generem la nova taula amb els nous valors de dispersió.
+
+```{r}
+
+# calculem les mesures de dispersió per a Height
+height.sdev <- sd(fifa.copy$Height)
+height.ric <- IQR(fifa.copy$Height)
+height.ram <- mad(fifa.copy$Height)
+
+dispersion.height.row <- c(height.sdev, height.ric, height.ram)
+dispersion.height.row
+
+# calculem les mesures de dispersió per a Weight
+weight.sdev <- sd(fifa.copy$Weight)
+weight.ric <- IQR(fifa.copy$Weight)
+weight.ram <- mad(fifa.copy$Weight)
+
+dispersion.weight.row <- c(weight.sdev, weight.ric, weight.ram)
+dispersion.weight.row
+
+# calculem les mesures de dispersió per a Age
+age.sdev <- sd(fifa.copy$Age)
+age.ric <- IQR(fifa.copy$Age)
+age.ram <- mad(fifa.copy$Age)
+
+dispersion.age.row <- c(age.sdev, age.ric, age.ram)
+
+# concatenem els vectors dels càlculs per a cada atribut
+vectors <- rbind(as.vector(dispersion.height.row), as.vector(dispersion.weight.row), as.vector(dispersion.age.row))
+
+# construïm el dataset
+df.dispersion <- as.data.frame(vectors)
+
+# afegim el header names
+colnames(df.dispersion)<- c('SDEV', 'IRC', 'DAM')
+
+# afegim row names
+rownames(df.dispersion)<- c('Height', 'Weight', 'Age')
+
+df.dispersion
+
+```
+
+Veiem clarament la robustesa de IRC i DAM que no han modificat quasi res o res del valor amb l'outlier. En canvi la desviació standard sí que s'ha vist força afectada.
+
+
+Valors de dispersió sense outliers:
+
+      Name      SDEV        IRC   DAM
+      Height    6.674276    10.0  7.413000	
+      Weight    6.899752    9.6   7.109067	
+      Age       4.676245    7.0   4.447800	
+
+Valors de dispersió amb outliers:
+
+      Name      SDEV        IRC   DAM
+      Height	  14.244423   10.0	7.41300	
+      Weight	  8.743561	  9.6   7.11648	
+      Age	      5.145762	  7.0   4.44780	
+
+******
+# Anàlisi de Components Principals (ACP)
+******
+
+Anem a realitzar un estudi de components principals. Aquest estudi s'acostuma a fer servir per a reduïr el nombre de variables en una mostra. El que volem és trobar el màxim valor de variança acumulada amb el menor nombre de components principals. Els components principals són noves variables que surten com una  combinació lineal de les variables originals i el vector propi o eigenvector.
+
+Si tenim molta correlació entre les variables, és a dir redundància, podrem eliminar alguna d'elles sense perdre informació de la mostra.
+
+Per fer l'estudi, primer anem a seleccionar les variables a tractar.
+
+```{r}
+fifa.pca <- fifa[,c('Height', 'Weight', 'Age', 'Rating')]
+```
+
+Ara mostrarem la matriu de correlació. Quan més aprop están de 1 o -1 indica que estan fortament relacionades de forma lineal. El valor negatiu indica que al augmentar una disminueix l'altre.
+
+```{r}
+correlation <- cor(fifa.pca)
+round(correlation, 2)
+```
+Com és força lògic, tenim una força relació entre el pes i l'alçada.
+
+De forma gràfica també ho podem veure. La línea diagonal és 1 perquè és la relació amb elles mateixes. 
+
+La que té força relació, és la que hem comentat abans: Height amb Weight.
+
+```{r}
+corrplot(correlation, type = "upper", order = "hclust", tl.col = "black", tl.srt = 45)
+```
+
+Farem servir per a realitzar la diagonalització la matriu de correlacions, ja que tenim dades formades per magnituds diferents. El que fa és normalitzar els valors amb mitjana 0 i desviació standard 1.
+
+```{r}
+PCA.cor <- prcomp(x=fifa.pca, center = TRUE, scale.= TRUE)
+summary(PCA.cor)
+```
+Amb la PC1 tenim un 0.4741, si afegim la PC2 ja passem a 0.8071, amb la PC3 0.9430 i ja amb el PC4 tota la variança. Per tant, amb només 3 components principals tindriem més del 94.3% de la variancia acumulada. Tenim un marge important per a treballar amb només 3 atributs.
+
+Per a resposta a l'exercici, tenim una variabilitat explicada del 0.4741 en PC1, 0.3330 en PC2, 0.1359 en PC3 i 0.0570 en PC4. L'acumulada de PC1 i PC2 és de 0.8071.
+
+Amb la següent instrucció mostrem els eigenvectors per a generar les funcions per construir els nous atributs.
+
+```{r}
+PCA.cor$rotation
+```
+Per exemple, per a un valor registre del dataset que anomenaré z:
+
+PC1 = -z1*0.5903669 -z2*0.6409058 -z3*0.3719633 -z4*0.3199219 on z1 és el valor de Height del registre z, z2 és Weight, z3 és Age i z4 és Rating.
+
+El mateix per a PC2, PC3, PC4 i per a cada un dels registres del dataset, construiriem el nou espai dimensional.
+
+Mostrem visualment la variança que aporta cada dimensió.
+```{r}
+# la funció mostra la variança de cada component 
+fviz_eig(PCA.cor, choice = c("variance"), addlabels = TRUE)
+```
+
+Veiem la contribució a la Dimensió 1 de cada variable.
+```{r}
+fviz_contrib(PCA.cor, choice = "var", axes = 1)
+```
+
+Veiem que les que més aporten són Weight primer, seguit de Height.
+
+Fem el mateix per la Dimensió 2.
+
+```{r}
+fviz_contrib(PCA.cor, choice = "var", axes = 2)
+```
+
+Per a la dimensió 2 és Rating seguit de Age.
+
+```{r}
+# pve acumulada
+PVE <- 100*PCA.cor$sdev^2/sum(PCA.cor$sdev^2)
+
+plot(cumsum(PVE), type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+```
+
+Una altre gràfica on podem la PVE (proporció de variança acumulada).
+
+
+Per a determinar amb quants components principals ens quedem. Fem servir:
+
+* Regla de Kaiser-Guttman: escollim els PC's on el seu eigenvalue sigui més gran que el valor mitjà (en la matriu de correlacions, aquest valor és 1).
+
+```{r}
+# PCA.cor$sdev és l'arrel quadrada dels valors propis, per treure els valors propis elevem al quadrat. 
+
+eigenvalues <- PCA.cor$sdev^2
+eigenvalues
+```
+Segons la regla Kaiser-Guttman només agafariem dos components principals.
+
+* Scree plot. Regla del colze: mostrem gràficament els eigenvalues i on veiem un colze (baixada pronunciada) és el nostre nombre de components.
+
+```{r}
+plot(eigenvalues, type = "o", 
+     ylab = "Eigenvalues", 
+     xlab = "Components principals", 
+     col = "blue")
+```
+
+No es veu un colze tan clar, però potser escolliriem 3 components principals.
+
+
+Mostrem gràficament la rellevància de les variables originals en els PC's i l'associació entre elles. Les originals són les fletxes des de l'origen. La longitud de la fletxa indica quina rellevància te en la projecció.
+
+
+```{r}
+ggbiplot(PCA.cor, scale = 1, obs.scale = 1, alpha=0,circle=TRUE)
+```
+
+Veiem en les fletxes la alta correlació entre les variables Height i Weight (que ja havíem comentat) i entre Age i Rating. Sembla que efectivament com ens deia la regla de Kaiser-Guttman podem fer servir només dues dimensions extretes de la correlació esmentada prèviament.  I també sembla que les 4 tenen un pes semblant ja que la llargaria de les fletxes és força similar.
+
+Si mostrem el núbol de punts podem apreciar un punt força allunyat respecte a la resta.
+```{r}
+ggbiplot(PCA.cor, scale = 1, obs.scale = 1, circle=TRUE)
+```
+
+Com s'indica als apunts, aquest valor que està força allunyat de la resta seria un candidat a valor atípic. És un valor on el Height i el Weight decreix (és la mateixa direcció de les fletxes en negatiu). És molt probable que sigui el valor que hem esmentat en el apartat d'outliers, el qual tenia un valor de pes força baix.
+
+******
+# Fitxer final
+******
+
+Guardem el dataset processat a 'fifa_clean.csv'
+
+```{r}
+write.csv(fifa,"fifa_clean.csv",row.names=TRUE)
+```
+

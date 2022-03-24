@@ -1,0 +1,487 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+]{article}
+\usepackage{lmodern}
+\usepackage{amssymb,amsmath}
+\usepackage{ifxetex,ifluatex}
+\ifnum 0\ifxetex 1\fi\ifluatex 1\fi=0 % if pdftex
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math}
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\hypersetup{
+  pdftitle={Estadística Avançada},
+  pdfauthor={Autor: Jordi Puig Ovejero},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+\urlstyle{same} % disable monospaced font for URLs
+\usepackage[margin=1in]{geometry}
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{48,48,48}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{1.00,0.81,0.69}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.50,0.62,0.50}{\textbf{#1}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.86,0.64,0.64}{#1}}
+\newcommand{\BuiltInTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.86,0.64,0.64}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.50,0.62,0.50}{#1}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.50,0.62,0.50}{\textbf{#1}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.86,0.64,0.64}{\textbf{#1}}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.94,0.87,0.69}{#1}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.87,0.87,0.75}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.86,0.86,0.80}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.50,0.62,0.50}{#1}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.76,0.75,0.62}{#1}}
+\newcommand{\ExtensionTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.75,0.75,0.82}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.94,0.94,0.56}{#1}}
+\newcommand{\ImportTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.50,0.62,0.50}{\textbf{#1}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.94,0.87,0.69}{#1}}
+\newcommand{\NormalTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.94,0.94,0.82}{#1}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.94,0.94,0.56}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{1.00,0.81,0.69}{\textbf{#1}}}
+\newcommand{\RegionMarkerTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.86,0.64,0.64}{#1}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.80,0.58,0.58}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.80,0.58,0.58}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.80,0.80,0.80}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.80,0.58,0.58}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.50,0.62,0.50}{\textbf{#1}}}
+\usepackage{graphicx,grffile}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{wrapfig}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{pdflscape}
+\usepackage{tabu}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+\usepackage{xcolor}
+
+\title{Estadística Avançada}
+\author{Autor: Jordi Puig Ovejero}
+\date{Març 2021}
+
+\begin{document}
+\maketitle
+
+{
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+Carrega de les llibreries que es necessiten
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{library}\NormalTok{(dplyr)}
+\KeywordTok{library}\NormalTok{(base)}
+\KeywordTok{library}\NormalTok{(matrixStats)}
+\KeywordTok{library}\NormalTok{(stringr)}
+\KeywordTok{library}\NormalTok{(ggplot2)}
+\KeywordTok{library}\NormalTok{(lubridate)}
+\KeywordTok{library}\NormalTok{(eeptools)}
+\KeywordTok{library}\NormalTok{(psych)}
+\KeywordTok{library}\NormalTok{(corrplot)}
+\KeywordTok{library}\NormalTok{(factoextra)}
+\KeywordTok{library}\NormalTok{(ggbiplot)}
+\KeywordTok{library}\NormalTok{(ggpubr)}
+\KeywordTok{library}\NormalTok{(rlang)}
+\KeywordTok{library}\NormalTok{(kableExtra)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{lectura-del-fitxer}{%
+\section{Lectura del fitxer}\label{lectura-del-fitxer}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+El fitxer on es troba el dataset és, \textbf{SFO.csv}:
+
+Carreguem les dades i fem un summary d'aquestes.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{sfo <-}\StringTok{ }\KeywordTok{read.csv}\NormalTok{(}\StringTok{'SFO.csv'}\NormalTok{,}\DataTypeTok{stringsAsFactors =} \OtherTok{TRUE}\NormalTok{, }\DataTypeTok{sep =} \StringTok{','}\NormalTok{)}
+\KeywordTok{attach}\NormalTok{(sfo) }\CommentTok{# ens permet referenciar les columnes de fifa sense haver d'especificar el dataset.}
+\KeywordTok{summary}\NormalTok{(sfo)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##       YEAR          MONTH             DAY         DAY_OF_WEEK   
+##  Min.   :2015   Min.   : 1.000   Min.   : 1.00   Min.   :1.000  
+##  1st Qu.:2015   1st Qu.: 3.000   1st Qu.: 8.00   1st Qu.:2.000  
+##  Median :2015   Median : 6.000   Median :16.00   Median :4.000  
+##  Mean   :2015   Mean   : 6.301   Mean   :15.71   Mean   :3.925  
+##  3rd Qu.:2015   3rd Qu.: 9.000   3rd Qu.:23.00   3rd Qu.:6.000  
+##  Max.   :2015   Max.   :12.000   Max.   :31.00   Max.   :7.000  
+##                                                                 
+##     AIRLINE      FLIGHT_NUMBER  ORIGIN_AIRPORT DESTINATION_AIRPORT
+##  UA     :45135   Min.   :   1   SFO:145952     LAX    :13408      
+##  OO     :34223   1st Qu.: 570                  JFK    : 8325      
+##  VX     :15848   Median :1263                  LAS    : 7955      
+##  WN     :13790   Mean   :2218                  ORD    : 7275      
+##  AA     :12062   3rd Qu.:3830                  SEA    : 6883      
+##  DL     : 9659   Max.   :6875                  SAN    : 6768      
+##  (Other):15235                                 (Other):95338      
+##  SCHEDULED_DEPARTURE DEPARTURE_TIME DEPARTURE_DELAY      TAXI_OUT     
+##  Min.   :   5        Min.   :   1   Min.   : -34.00   Min.   :  2.00  
+##  1st Qu.: 920        1st Qu.: 925   1st Qu.:  -5.00   1st Qu.: 13.00  
+##  Median :1319        Median :1328   Median :  -1.00   Median : 16.00  
+##  Mean   :1366        Mean   :1367   Mean   :  11.19   Mean   : 17.76  
+##  3rd Qu.:1800        3rd Qu.:1805   3rd Qu.:  10.00   3rd Qu.: 21.00  
+##  Max.   :2359        Max.   :2400   Max.   :1496.00   Max.   :125.00  
+##                                                       NA's   :40      
+##    WHEELS_OFF   SCHEDULED_TIME   ELAPSED_TIME      AIR_TIME        DISTANCE   
+##  Min.   :   1   Min.   : 43.0   Min.   : 30.0   Min.   :  8.0   Min.   :  77  
+##  1st Qu.: 938   1st Qu.: 90.0   1st Qu.: 87.0   1st Qu.: 64.0   1st Qu.: 414  
+##  Median :1341   Median :126.0   Median :125.0   Median : 98.0   Median : 679  
+##  Mean   :1380   Mean   :179.6   Mean   :174.1   Mean   :148.7   Mean   :1201  
+##  3rd Qu.:1811   3rd Qu.:277.0   3rd Qu.:269.0   3rd Qu.:242.0   3rd Qu.:2139  
+##  Max.   :2400   Max.   :367.0   Max.   :453.0   Max.   :389.0   Max.   :2704  
+##  NA's   :40                     NA's   :461     NA's   :461                   
+##    WHEELS_ON       TAXI_IN        SCHEDULED_ARRIVAL  ARRIVAL_TIME 
+##  Min.   :   1   Min.   :  1.000   Min.   :   1      Min.   :   1  
+##  1st Qu.:1121   1st Qu.:  4.000   1st Qu.:1135      1st Qu.:1120  
+##  Median :1554   Median :  6.000   Median :1602      Median :1556  
+##  Mean   :1488   Mean   :  7.712   Mean   :1503      Mean   :1487  
+##  3rd Qu.:1944   3rd Qu.:  9.000   3rd Qu.:1948      3rd Qu.:1946  
+##  Max.   :2400   Max.   :146.000   Max.   :2359      Max.   :2400  
+##  NA's   :173    NA's   :173                         NA's   :173   
+##  ARRIVAL_DELAY        DIVERTED          CANCELLED         CANCELLATION_REASON
+##  Min.   : -65.00   Min.   :0.000000   Min.   :0.0000000    :145860           
+##  1st Qu.: -13.00   1st Qu.:0.000000   1st Qu.:0.0000000   A:    39           
+##  Median :  -4.00   Median :0.000000   Median :0.0000000   B:    46           
+##  Mean   :   5.75   Mean   :0.002528   Mean   :0.0006303   C:     7           
+##  3rd Qu.:   9.00   3rd Qu.:0.000000   3rd Qu.:0.0000000                      
+##  Max.   :1498.00   Max.   :1.000000   Max.   :1.0000000                      
+##  NA's   :461                                                                 
+##  AIR_SYSTEM_DELAY  LATE_AIRCRAFT_DELAY WEATHER_DELAY   
+##  Min.   :  0.000   Min.   :   0.00     Min.   :  0.0   
+##  1st Qu.:  0.000   1st Qu.:   0.00     1st Qu.:  0.0   
+##  Median :  0.000   Median :   0.00     Median :  0.0   
+##  Mean   :  1.973   Mean   :  16.47     Mean   :  0.9   
+##  3rd Qu.:  0.000   3rd Qu.:  17.00     3rd Qu.:  0.0   
+##  Max.   :488.000   Max.   :1102.00     Max.   :767.0   
+##                    NA's   :93699       NA's   :116418
+\end{verbatim}
+
+Contem les files i columnes que tenim.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{cat}\NormalTok{(}\StringTok{'Tenim un total de'}\NormalTok{, }\KeywordTok{ncol}\NormalTok{(sfo), }\StringTok{'columnes'}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Tenim un total de 28 columnes
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{cat}\NormalTok{(}\StringTok{'Tenim un total de'}\NormalTok{, }\KeywordTok{nrow}\NormalTok{(sfo), }\StringTok{'registres'}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Tenim un total de 145952 registres
+\end{verbatim}
+
+I mostrem els valors NA per cada atribut.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{colSums}\NormalTok{(}\KeywordTok{is.na}\NormalTok{(sfo))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##                YEAR               MONTH                 DAY         DAY_OF_WEEK 
+##                   0                   0                   0                   0 
+##             AIRLINE       FLIGHT_NUMBER      ORIGIN_AIRPORT DESTINATION_AIRPORT 
+##                   0                   0                   0                   0 
+## SCHEDULED_DEPARTURE      DEPARTURE_TIME     DEPARTURE_DELAY            TAXI_OUT 
+##                   0                   0                   0                  40 
+##          WHEELS_OFF      SCHEDULED_TIME        ELAPSED_TIME            AIR_TIME 
+##                  40                   0                 461                 461 
+##            DISTANCE           WHEELS_ON             TAXI_IN   SCHEDULED_ARRIVAL 
+##                   0                 173                 173                   0 
+##        ARRIVAL_TIME       ARRIVAL_DELAY            DIVERTED           CANCELLED 
+##                 173                 461                   0                   0 
+## CANCELLATION_REASON    AIR_SYSTEM_DELAY LATE_AIRCRAFT_DELAY       WEATHER_DELAY 
+##                   0                   0               93699              116418
+\end{verbatim}
+
+Finalment fem un head dels atributs a tractar.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{head}\NormalTok{(sfo)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##   YEAR MONTH DAY DAY_OF_WEEK AIRLINE FLIGHT_NUMBER ORIGIN_AIRPORT
+## 1 2015    12  31           4      F9           668            SFO
+## 2 2015     1   8           4      OO          6287            SFO
+## 3 2015    11  27           5      AA          2207            SFO
+## 4 2015     5  30           6      OO          5647            SFO
+## 5 2015     5  23           6      OO          6508            SFO
+## 6 2015     3  29           7      OO          6289            SFO
+##   DESTINATION_AIRPORT SCHEDULED_DEPARTURE DEPARTURE_TIME DEPARTURE_DELAY
+## 1                 DEN                2000           1926             -34
+## 2                 SBA                1350           1318             -32
+## 3                 DFW                1200           1129             -31
+## 4                 SBA                1840           1814             -26
+## 5                 PSP                2230           2205             -25
+## 6                 MMH                 831            809             -22
+##   TAXI_OUT WHEELS_OFF SCHEDULED_TIME ELAPSED_TIME AIR_TIME DISTANCE WHEELS_ON
+## 1       14       1940            150          139      109      967      2229
+## 2       52       1410             71           99       44      262      1454
+## 3       43       1212            208          247      177     1464      1709
+## 4       36       1850             75           87       47      262      1937
+## 5       39       2244             92          110       64      421      2348
+## 6       25        834             63           71       41      193       915
+##   TAXI_IN SCHEDULED_ARRIVAL ARRIVAL_TIME ARRIVAL_DELAY DIVERTED CANCELLED
+## 1      16              2330         2245           -45        0         0
+## 2       3              1501         1457            -4        0         0
+## 3      27              1728         1736             8        0         0
+## 4       4              1955         1941           -14        0         0
+## 5       7                 2         2355            -7        0         0
+## 6       5               934          920           -14        0         0
+##   CANCELLATION_REASON AIR_SYSTEM_DELAY LATE_AIRCRAFT_DELAY WEATHER_DELAY
+## 1                                    0                  NA            NA
+## 2                                    0                   0            NA
+## 3                                    0                  NA            NA
+## 4                                    0                  NA            NA
+## 5                                    0                  NA            NA
+## 6                                    0                  NA            NA
+\end{verbatim}
+
+Amb una ràpida ullada podem dir que:
+
+\begin{itemize}
+\tightlist
+\item
+  Nombre de registres: 145952
+\item
+  Nombre d'atributs totals: 28
+\item
+  Tenim valors NA a: WHEELS\_OFF, ELAPSED\_TIME, WEATHER\_DELAY,
+  AIR\_TIME, WHEELS\_ON, TAXI\_IN, ARRIVAL\_TIME, ARRIVAL\_DELAY,
+  LATE\_AIRCRAFT\_DELAY i WEATHER\_DELAY.
+\end{itemize}
+
+\hypertarget{definiciuxf3-dels-atributs}{%
+\subsection{Definició dels atributs}\label{definiciuxf3-dels-atributs}}
+
+\begin{itemize}
+\tightlist
+\item
+  Month: Dia del mes de sortida del vol.
+\item
+  Day of week: Dia de la setmana de sortida del vol.
+\item
+  Airline: Nom en sigles de la companyia aèria.
+\item
+  Destination Airport: Aeroport de destinació.
+\item
+  Scheduled Departure: Hora de sortida del vol estimada per la
+  companyia.
+\item
+  Departure Time: Hora de sortida real del vol.
+\item
+  Departure Delay: Diferència entre l'hora de sortida estimada i la
+  real.
+\item
+  Air Time: Temps real de vol en aire.
+\item
+  Distance: Distància entre els aeroports origen i arribada.
+\item
+  Scheduled Arrival: Hora d'arribada del vol estimada per la companyia.
+\item
+  Arrival Time: Hora d'arribada del vol.
+\item
+  Arrival Delay: Diferència entre l'hora d'arribada estimada i la real.
+\item
+  Late Aircraft Delay: Retard per arribada tard de l'avió.
+\item
+  Diverted: Indicador de vol desviat, sent zero si el vol s'ha efectuat
+  amb normalitat i un si ha estat desviat.
+\item
+  Cancelled: Indicador de vol cancel·lat, sent zero si el vol s'ha
+  efectuat i un si no.
+\end{itemize}
+
+\hypertarget{classes-del-atributs-del-dataframe}{%
+\subsection{Classes del atributs del
+dataframe}\label{classes-del-atributs-del-dataframe}}
+
+Anem a comprovar les classes dels atributs del dataframe
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{str}\NormalTok{(sfo)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## 'data.frame':    145952 obs. of  28 variables:
+##  $ YEAR               : int  2015 2015 2015 2015 2015 2015 2015 2015 2015 2015 ...
+##  $ MONTH              : int  12 1 11 5 5 3 4 4 4 6 ...
+##  $ DAY                : int  31 8 27 30 23 29 11 18 25 2 ...
+##  $ DAY_OF_WEEK        : int  4 4 5 6 6 7 6 6 6 2 ...
+##  $ AIRLINE            : Factor w/ 11 levels "AA","AS","B6",..: 5 7 1 7 7 7 2 2 2 7 ...
+##  $ FLIGHT_NUMBER      : int  668 6287 2207 5647 6508 6289 304 304 317 5459 ...
+##  $ ORIGIN_AIRPORT     : Factor w/ 1 level "SFO": 1 1 1 1 1 1 1 1 1 1 ...
+##  $ DESTINATION_AIRPORT: Factor w/ 80 levels "ABQ","ACV","ANC",..: 20 70 21 70 63 45 63 63 72 71 ...
+##  $ SCHEDULED_DEPARTURE: int  2000 1350 1200 1840 2230 831 2135 2135 2145 900 ...
+##  $ DEPARTURE_TIME     : int  1926 1318 1129 1814 2205 809 2113 2113 2123 838 ...
+##  $ DEPARTURE_DELAY    : int  -34 -32 -31 -26 -25 -22 -22 -22 -22 -22 ...
+##  $ TAXI_OUT           : int  14 52 43 36 39 25 23 15 20 35 ...
+##  $ WHEELS_OFF         : int  1940 1410 1212 1850 2244 834 2136 2128 2143 913 ...
+##  $ SCHEDULED_TIME     : int  150 71 208 75 92 63 84 84 124 66 ...
+##  $ ELAPSED_TIME       : int  139 99 247 87 110 71 95 84 136 75 ...
+##  $ AIR_TIME           : int  109 44 177 47 64 41 67 65 111 36 ...
+##  $ DISTANCE           : int  967 262 1464 262 421 193 421 421 679 190 ...
+##  $ WHEELS_ON          : int  2229 1454 1709 1937 2348 915 2243 2233 2334 949 ...
+##  $ TAXI_IN            : int  16 3 27 4 7 5 5 4 5 4 ...
+##  $ SCHEDULED_ARRIVAL  : int  2330 1501 1728 1955 2 934 2259 2259 2349 1006 ...
+##  $ ARRIVAL_TIME       : int  2245 1457 1736 1941 2355 920 2248 2237 2339 953 ...
+##  $ ARRIVAL_DELAY      : int  -45 -4 8 -14 -7 -14 -11 -22 -10 -13 ...
+##  $ DIVERTED           : int  0 0 0 0 0 0 0 0 0 0 ...
+##  $ CANCELLED          : int  0 0 0 0 0 0 0 0 0 0 ...
+##  $ CANCELLATION_REASON: Factor w/ 4 levels "","A","B","C": 1 1 1 1 1 1 1 1 1 1 ...
+##  $ AIR_SYSTEM_DELAY   : int  0 0 0 0 0 0 0 0 0 0 ...
+##  $ LATE_AIRCRAFT_DELAY: int  NA 0 NA NA NA NA NA NA NA NA ...
+##  $ WEATHER_DELAY      : int  NA NA NA NA NA NA NA NA NA NA ...
+\end{verbatim}
+
+Veiem que tenim algunes dades com a quantitatives i altres com a
+qualitatives. Segons exercici i la necessitat realitzarem
+transformacions.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{model-de-regressiuxf3-lineal}{%
+\section{Model de regressió lineal}\label{model-de-regressiuxf3-lineal}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{model-de-regressiuxf3-linealregresores-quantitatius}{%
+\subsection{Model de regressió lineal(regresores
+quantitatius)}\label{model-de-regressiuxf3-linealregresores-quantitatius}}
+
+\begin{enumerate}
+\def\labelenumi{\alph{enumi}.}
+\item
+  Model lineal de la variable DEPARTURE\_DELAY en funció de la variable
+  ARRIVAL\_DELAY.
+\item
+  Afegim la variable independent DISTANCE.
+\item
+  Dividim la mostra per distpancia.
+\end{enumerate}
+
+\hypertarget{model-de-regressiuxf3-lineal-muxfaltiple-regresors-quantitatius-i-qualitatius}{%
+\subsection{Model de regressió lineal múltiple (regresors quantitatius i
+qualitatius)}\label{model-de-regressiuxf3-lineal-muxfaltiple-regresors-quantitatius-i-qualitatius}}
+
+\hypertarget{diagnosi-del-model}{%
+\subsection{Diagnosi del model}\label{diagnosi-del-model}}
+
+\hypertarget{predicciuxf3-del-model}{%
+\subsection{Predicció del model}\label{predicciuxf3-del-model}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{model-de-regressiuxf3-loguxedstica}{%
+\section{Model de regressió
+logística}\label{model-de-regressiuxf3-loguxedstica}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{estudi-de-relacions-entre-variables}{%
+\subsection{Estudi de relacions entre
+variables}\label{estudi-de-relacions-entre-variables}}
+
+\hypertarget{model-de-regressiuxf3-loguxedstica-1}{%
+\subsection{Model de regressió
+logística}\label{model-de-regressiuxf3-loguxedstica-1}}
+
+\hypertarget{predicciuxf3}{%
+\subsection{Predicció}\label{predicciuxf3}}
+
+\hypertarget{bondat-de-lajust}{%
+\subsection{Bondat de l'ajust}\label{bondat-de-lajust}}
+
+\hypertarget{corba-roc}{%
+\subsection{Corba ROC}\label{corba-roc}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\hypertarget{conclusions-de-lanuxe0lisi}{%
+\section{Conclusions de l'anàlisi}\label{conclusions-de-lanuxe0lisi}}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\end{document}

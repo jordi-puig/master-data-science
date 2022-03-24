@@ -1,0 +1,915 @@
+---
+title: 'Estadística Avançada'
+author: "Autor: Jordi Puig Ovejero"
+date: "Març 2021"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+Carrega de les llibreries que es necessiten 
+```{r message= FALSE, warning=FALSE}
+library(dplyr)
+library(base)
+library(matrixStats)
+library(stringr)
+library(ggplot2)
+library(lubridate)
+library(eeptools)
+library(psych)
+library(corrplot)
+library(factoextra)
+library(ggbiplot)
+library(ggpubr)
+library(rlang)
+library(kableExtra)
+```
+
+******
+# Lectura del fitxer
+******
+
+El fitxer on es troba el dataset és, **fifa_clean.csv**:
+
+Carreguem les dades i fem un summary d'aquestes tal i com que ens demana l'activitat.
+```{r message= FALSE, warning=FALSE}
+fifa <- read.csv('fifa_clean.csv',stringsAsFactors = TRUE, sep = ',')
+fifa.tmp <- fifa[,c('Name', 'Nationality', 'National_Position', 'National_Kit', 'Club', 'Club_Position', 'Club_Kit', 'Club_Joining', 'Contract_Expiry', 'Rating', 'Height', 'Weight', 'Preffered_Foot', 'Birth_Date', 'Age', 'Preffered_Position', 'Work_Rate', 'Weak_foot' , 'Skill_Moves')]
+
+attach(fifa) # ens permet referenciar les columnes de fifa sense haver d'especificar el dataset.
+
+summary(fifa.tmp)
+```
+
+
+Contem les files i columnes que tenim.
+```{r message= FALSE, warning=FALSE}
+ncol(fifa)
+nrow(fifa.tmp)
+ncol(fifa.tmp)
+```
+
+I mostrem els valors NA per cada atribut.
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(fifa.tmp))
+```
+Finalment fem un head dels atributs a tractar.
+
+```{r}
+head(fifa.tmp)
+```
+
+
+Amb una ràpida ullada podem dir que: 
+
+* Nombre de registres: 17588
+* Nombre d'atributs totals: 54
+* Nombre d'atributs a treballar: 19
+* Tenim valors NA a Contract_Expiry, Club_Kit i sobretot a National_Kit
+* National_Position té una categoria amb string buit amb molts elements.
+
+
+## Definició dels atributs
+
+* Name (Nom del jugador)
+* Nationality (Nacionalitat del jugador)
+* National_Position (Posició de joc en equip nacional)
+* National_Kit (Número d’equipació en equip nacional)
+* Club (Nom del club)
+* Club_Position (Posició de joc en club)
+* Club_Kit (Número d’equipació en club)
+* Club_Joining (Data que va començar al club)
+* Contract_Expire (Any finalització del contracte)
+* Rating (Valoració global del jugador, entre 0 i 100)
+* Height (Altura)
+* Weight (Pes)
+* Preffered_Foot (Peu preferit)
+* Birth_Date (Data de naixement)
+* Age (Edat)
+* Preffered_Position (Posició preferida)
+* Work_Rate (valoració qualitativa en termes d’atac-defensa)
+* Weak_foot (valoració entre 1 i 5 de control i potència de la cama no preferida)
+* Skill_Moves (valoració de l’1 al 5 de l’habilitat en moviments del jugador)
+
+## Classes del atributs del dataframe
+
+Anem a comprovar les classes dels atributs del dataframe
+
+```{r}
+str(fifa.tmp)
+```
+Veiem que les dates estan com a factor i les convertirem a Date
+
+## Conversió de Birth_Date i Club_Joining a Date
+
+```{r}
+# primer veiem la forma i veiem que te el format mm/dd/yyyy
+head(fifa$Birth_Date)
+
+# convertim, fem un summary i finalment veiem el class 
+fifa$Birth_Date <- as.Date(fifa$Birth_Date, format="%m/%d/%Y")
+summary(fifa$Birth_Date)
+class(fifa$Birth_Date)
+```
+```{r}
+# primer veiem la forma i veiem que te el format mm/dd/yyyy
+head(fifa$Club_Joining)
+
+# convertim, fem un summary i finalment veiem el class 
+fifa$Club_Joining <- as.Date(fifa$Club_Joining, format="%m/%d/%Y")
+summary(fifa$Club_Joining)
+class(fifa$Club_Joining)
+```
+
+Potser més endavant convertim també Contract_Expiry, per ara el deixem com a Integer.
+
+## Conversió dels valors buits de National_Position a NA's
+
+Convertim el valor del factor amb string buit de National_Position a NA's. Crec que te més sentit com a NA.
+
+```{r}
+# comprovem la class
+class(fifa$National_Position)
+
+# mostrem els factors i veiem el element buit
+summary(fifa$National_Position)
+
+# passem a NA els string buits
+fifa$National_Position[fifa$National_Position == ""] <- NA
+
+# comprovem els levels i veiem que el level "" està amb 0 elements
+levels(fifa$National_Position)
+
+# esborrem el level ""
+fifa$National_Position <- droplevels(fifa$National_Position)
+
+# mostrem el summary amb el resultat
+summary(fifa$National_Position)
+
+```
+*****
+# Rating dels jugadors
+*****
+
+Primer farem un analisi i posteriorment farem un càlcul d'interval de confiança.
+
+## Anàlisi visual
+
+```{r}
+summary(fifa$Rating)
+```
+El primer que mostrem amb el summary són els valors de: 
+
+* mediana: 66.00
+* mitja: 66.17
+* 1er quartil: 62.00
+* 3er quartil: 71.00
+* mínim: 45.00
+* màxim: 94.00
+
+Així a primera ullada veiem que no tenim cap valor extrem (outlier) i sembla molt probable que ens trobem amb una distribució normal.
+
+```{r}
+boxplot(fifa$Rating, horizontal=TRUE, main="Rating dels jugadors")
+```
+
+
+
+Amb el boxplot veiem els mateixos valors que hem esmentat. Els límits de la caixa indiquen el Q1-Q3, la mitja és la línea central i tenim els extrems on tenim els punts al final de les líneas.
+
+```{r}
+hist(fifa$Rating, breaks=50)
+```
+
+Tant amb el boxplot com ara amb l'histograma podem concloure visualment que ens trobem amb una distribució normal.
+
+```{r}
+ggqqplot(fifa$Rating)
+```
+
+Per acabar de comprovar-ho fem servir la funció ggqqplot [https://es.wikipedia.org/wiki/Gr%C3%A1fico_Q-Q](gràfic Q-Q), on tenim una distribució exemple i la nostre. Com més aprop de la normalitat més sobreposada estarà una línea sobre l'altre. Els nostres punts fan una línea recta molt ben definida sobre la línea d'exemple.
+
+## Interval de confiança
+
+Anem a calcular l'interval de confiança sobre l'atribut Rating.
+
+### Interval de confiança sobre la mitjana rating
+
+En aquest cas, assumim com hem vist que la mostra segueix una distribució normal i tenim una desviació típica coneguda (realment no la tenim). Anem a calcular l'interval [L,U] tal que la probabilitat que z (un valor de la mostra) estigui en aquest interval sigui de 0.95. 
+
+Per calcular l'interval amb aquesta probabilitat necessitem el valor crític per al nivell de confiança del 95% que és α / 2. Aquest valor el càlculem amb la funció qnorm.
+
+
+```{r}
+qnorm(0.975)
+```
+
+Donem per fet que la desviació estandard és la de la mostra que tenim. Llavors per calcular els límits superior i inferior de l'interval:
+
+```[mean - z * SE], [mean + z * SE], on SE = sd / √n```
+
+```{r}
+sd <- sd(fifa$Rating)
+alfa <- 1- 0.95
+n <- nrow(fifa)
+SE <- sd / sqrt(n)
+z <- qnorm(alfa/2, lower.tail=FALSE)
+L <- mean(fifa$Rating) - z*SE
+U <- mean(fifa$Rating) + z*SE
+round(c(L,U), 2)
+```
+
+Llavors, podem concloure que la mitjana de Rating amb un nivell de confiança de 95% és troba entre els valors 66.06 i 66.27.
+
+
+### Interval de confiança sobre la mitjana rating amb variància desconeguda.
+
+Realment no tenim la variància de la mostra de Rating, per tant el que fem és trobar una estimació d'aquesta a partir de la mostra que tenim. En aquest cas, la variable segueix una distrobució de t d'Student amb n - 1 graus de llibertat on amb mides grans s'apropa a una distribució normal (n és el nombre d'elements de la mostra).
+
+```{r}
+alfa <- 1-0.95
+sd <- sd(fifa$Rating)
+n <- nrow(fifa)
+SE <- sd / sqrt(n)
+z <- qt(alfa/2, df=n-1, lower.tail=FALSE)
+L <- mean(fifa$Rating) - z*SE
+U <- mean(fifa$Rating) + z*SE
+round( c(L,U), 2)
+```
+Tenim el mateix valor que amb la desviació estandard calculada de la mostra.
+
+Amb la funció t.test obtenim l'interval de confiança amb variable desconeguda també de forma automàtica.
+
+```{r}
+t.test(fifa$Rating, conf.level = 0.95)
+```
+
+*****
+# Diferències entre jugadors
+*****
+
+Volem saber sota una creença popular si els jugadors esquerrans tenen millor control de la pilota (Ball_Control), valoració (Rating) i dribbling (Dribbling) que els dretans.
+
+Precondicions:
+
+* Hem de treure els jugadors que no siguin de camp, es a dir, els porters. 
+* El control de la pilota el tenim al camp Preffered_Foot (Left o Right).
+* El control de la pilota el tenim al camp Ball_Control.
+* La valoració la tenim al camp Rating.
+* El dribbling el tenim al camp Dribbling.
+* Nivell de confiança del 95%.
+
+Anem a seleccionar les dues mostres dels no-porters (jugadors de camp):
+
+```{r}
+# seleccionem els jugadors de camp
+nrow(fifa)
+fifa.fieldplayer <- subset(fifa, fifa$Club_Position != 'GK')
+nrow(fifa.fieldplayer)
+
+# comprovem que és correcte
+summary(fifa.fieldplayer$Club_Position)
+
+# seleccionem els esquerrans i els dretans per grups
+fifa.left <- subset(fifa.fieldplayer, fifa.fieldplayer$Preffered_Foot == 'Left')
+fifa.right <- subset(fifa.fieldplayer, fifa.fieldplayer$Preffered_Foot == 'Right')
+
+# comprovem que és correcte
+summary(fifa.left$Preffered_Foot)
+summary(fifa.right$Preffered_Foot)
+```
+
+## Pregunta d’investigació
+
+Farem diverses preguntes d'investigació:
+
+1. Tenen els jugadors esquerrans millor control de la pilota que els dretans?
+2. Tenen els jugadors esquerrans millor valoració que els dretans?
+3. Tenen els jugadors esquerrans millor dribbling que els dretans?
+
+## Representació visual
+
+Anem a representar visualment cada una dels atributs en funció del peu amb el que juguen.
+
+### Ball_Control
+
+```{r}
+ggplot(fifa) +
+  aes(x = Ball_Control, y = Preffered_Foot) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal() +coord_flip()
+```
+
+Visualment, sí que sembla que els jugadors esquerrans siguin millors que els dretans en quant a control de pilota. Tant el Q1, Q3 i mediana són valors superiors. També ho sembla el valora mínim i màxim.
+
+
+### Rating
+
+```{r}
+ggplot(fifa) +
+  aes(x = Rating, y = Preffered_Foot) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal() +coord_flip()
+```
+
+El mateix passa amb el camp Rating però potser no és tant evident.
+
+### Dribbling
+
+```{r}
+ggplot(fifa) +
+  aes(x = Dribbling, y = Preffered_Foot) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal() +coord_flip()
+```
+
+I finalment el Dribbling el mateix que amb les altres dues propietats. Visualment diria que efectivament sembla que els jugadors esquerrans tenen millor control de la pilota, valoració i dribbling que els dretans.
+
+## Hipòtesi nul·la i alternativa
+
+Farem un contrast d'hipòtesi unilateral. 
+
+1. Control de pilota:
+
+    * Hipòtesi nul·la: Ball_Control Jugadors esquerrans = Ball_Control jugadors dretans
+    * Hipòtesi alternativa: Ball_Control Jugadors esquerrans > Ball_Control jugadors dretans
+
+2. Valoració:
+
+    * Hipòtesi nul·la: Rating Jugadors esquerrans = Rating jugadors dretans
+    * Hipòtesi alternativa: Rating Jugadors esquerrans > Rating jugadors dretans
+
+3.  Dribbling:
+
+    * Hipòtesi nul·la: Dribbling Jugadors esquerrans = Dribbling jugadors dretans
+    * Hipòtesi alternativa: Dribbling Jugadors esquerrans > Dribbling jugadors dretans
+
+## Mètode
+
+### Una mostra o dues mostres? Si són dues, relacionades o indenpendents?
+
+És un test d'hipòtesi de dues mostres, ja que estem comparant paràmetres de dues poblacions (jugadors dretans i jugadors esquerrans).
+
+Las mostres son independents ja que els valors d'una mostra no afectan als valors de l'altre.
+
+### Podem assumir normalitat? Perquè?
+
+Sí. Podem assumir normalitat ja que a partir del Teorem Central de Límit (TCL) podem dir que la mitjana de la mostra s'aproxima a una distribució normal quan el nombre d'elements està per sobre de 30 (n > 30). En el nostre cas, ambdues mostres estan molt per sobre de 30.
+
+
+```{r}
+# nombre d'elements de la mostra del peu esquerra
+nrow(fifa.left)
+
+# nombre d'elements de la mostra del peu dret
+nrow(fifa.right)
+```
+
+
+En el cas que no fos així, hauriem d'utilitzar un test de normalitat de dades com per exemple el de Shapiro-Wilk.
+
+
+### Test és paramètric o no?
+
+Es tracta d'un test paramètric ja que estem assumint que les dades segueixen una determinada distribució, en aquest cas distribució normal o més concretament t de Student ja que la variància de les mostres l'haurem d'inferir.
+
+### Bilateral o unilateral?
+
+Com hem comentat, donada la nostre hipòtesi alternativa és tracta d'un test unilateral. Per a rebutjar la hipòtesi nul·la cal observar un valor superior en els jugadors esquerrans que en els dretans.
+
+### És pot assumir homocedasticitat o heterocedasticitat?
+
+Les variàncies són desconegudes però similars quan podem assumir homocedasticitat, quan són diferents diem que podem assumir heterocedasticitat.
+
+Per saber quin tipus de variàncies tenim anem a realitzar el **test d'igualtat de variàncies**.
+
+Hem d'aplicar el test d'igualtat de variàncies:
+
+
+* Ho: σ²₁ = σ²₂
+* H1: σ²₁ ≠ σ²₂
+
+
+Calculem els valors de les variançes mostrals i calculem el valor observat a partir de la distribució F d'Snedecor.
+
+Crearem una funció que realitzarà els càlculs per a les tres variables:
+
+```{r}
+vtype <- function(left, right) {
+   
+    # el nivell de confiança és del 95% per tant tenim una alpha de 0.05 (P=0.95)
+    alfa <- 0.05
+
+    # calculem les desviacions de les mostres
+    sd1 <- sd(left)
+    sd2 <- sd(right)
+    
+    # calculem les mitjes de les mostres
+    mean1 <- mean(left)
+    mean2 <- mean(right)
+    
+    # elements de les mostres
+    n1 <- length(left)
+    n2 <- length(right)
+    
+    # valor observat de la mostra
+    fobs <- sd1^2 / sd2^2
+    cat("El valor observat és:", fobs, "\n")
+    
+    # llindar inferior de la zona d'acceptació
+    fcritL <- qf(alfa/2, df1=n1-1, df2=n2-2)
+    cat("El llindar inferior és:", fcritL, "\n")
+    
+    # llindar superior de la zona d'acceptació
+    fcritU <- qf(1 - alfa/2, df1=n1-1, df2=n2-2)
+    cat("El llindar superior és:", fcritU, "\n")
+    
+    # calculem la probabilitat d'obtenir el valor observat assumint que la hipòtesi nul·la és certa. Si p < alpha, podem rebutjar la hipòtesi nul·la.
+    pvalue <- min(pf(fobs, df1=n1-1, df2=n2-2, lower.tail=FALSE ), pf(fobs, df1=n1-1, df2=n2-2))*2
+    cat("El valor de p és:", pvalue, "\n")
+
+}
+```
+
+
+#### Ball_Control
+```{r}
+vtype(fifa.left$Ball_Control, fifa.right$Ball_Control)
+```
+El valor observat és de 0.5909475 que no és troba en la zona d'acceptació [0.9508611, 1.050977], això fà que rebutjem la hipòtesi nul·la i concloem que tenim heterocedasticitat. Anàlogament hem càlculat la p que és molt per sota de l'alfa i per tant també ens indica que no acceptarem la hipòtesi nul·la.
+
+Farem els mateix procediment per Rating i Dribbling. Repetirem alguns càlculs que realment no caldrien (alfa, n1, n2, fcritL i fcritU), ja que depenen de n1 i n2 i aquests són els mateixos.
+
+#### Rating
+```{r}
+vtype(fifa.left$Rating, fifa.right$Rating)
+```
+
+Passa exactament el mateix que amb Ball_Control. Valor observat cau per sota de la zona d'acceptació que ja sabiem que era [0.9508611, 1.050977], encara que tal i com havíem vist a l'anàlisi visual no és tant evident.
+
+#### Dribbling
+```{r}
+vtype(fifa.left$Dribbling, fifa.right$Dribbling)
+```
+
+
+I finalment, el mateix amb Dribbling. Valor observat = 0.6269791 < [0.9508611, 1.050977] => heterocedasticitat. El p-valor està molt per sota del valor alfa que és 0.05 per tant ens confirma aquesta no acceptació de la hipòtesi nul·la.
+
+### Resum
+
+Tenim doncs per a cada un dels test d'hipòtesi que hem de realitzar:
+
+* Dues mostres independents.
+* Assumim distribucions normals.
+* Variances desconegudes.
+* Heterocedasticitat.
+* Test unilateral.
+* Test paramètric.
+
+## Càlculs
+
+Anem a realitzar els càlculs per a resoldre les preguntes d'investigació a partir dels test d'hipòtesi. L'estadístic segueix una distribució t de Student en lloc de la distribució normal ja que hem d'estimar les variançes a partir de les mostres.
+
+### Function
+
+Montem una funció per a generalitzar els càlculs
+
+```{r}
+f2 <- function(left, right) {
+  
+  results <- NULL
+  
+  # càlculs de mean, n i s
+  mean_Left <- mean(left)
+  cat("mean_Left és:", mean_Left, "\n")
+  results$mean_Left <- mean_Left
+  
+  mean_Right <- mean(right)
+  cat("mean_Right és:", mean_Right, "\n")
+  results$mean_Right <- mean_Right
+  
+  n_Left <- length(left)
+  cat("n_Left és:", n_Left, "\n")
+  results$n_Left <- n_Left
+  
+  n_Right <- length(right)
+  cat("n_Right és:", n_Right, "\n")
+  results$n_Right <- n_Right  
+  
+  s_left <- sd(left)
+  cat("s_left és:", s_left, "\n")
+  results$s_left <- s_left  
+  
+  s_right <- sd(right)
+  cat("s_right és:", s_right, "\n")
+  results$s_right <- s_right
+  
+  # estadístic de contrast
+  obs_value <- (mean_Left - mean_Right) / (sqrt((s_left^2 / n_Left) + (s_right^2 / n_Right)))
+  cat("L'estadístic de contrast o valor observat és:", round(obs_value, 3), "\n")
+  results$obs_value <- obs_value
+  
+  # graus de llibertat
+  v <- ((s_left^2 / n_Left) + (s_right^2 / n_Right))^2 / (((s_left^2 / n_Left)^2 / (n_Left - 1)) + ((s_right^2 / n_Right)^2 / (n_Right - 1)))
+  cat("Els graus de llibertat són:", round(v,1), "\n")
+  results$v <- v
+  
+  # valor crític on rebutjem la H0 en favor de la alternativa.
+  # com volem la part superior de la corva, fem lower.tail = FALSE
+  critical <- qt(0.005, lower.tail = FALSE, df=round(v,1)-1)
+  cat("La regió d'acceptació de la hipòtesi nul·la està entre ( -infinit,", critical, "]\n")
+  results$critical <- critical
+
+  # Càlcul del valor pvalue
+  pvalue <- pt(obs_value, lower.tail = FALSE, df=round(v,1)-1)
+  cat("La probabilitat de que rebutjar la hipòtesi sigui incorrecte és:", pvalue, "]\n")
+  results$pvalue <- pvalue
+  
+    
+  return <- results
+}
+```
+
+### Ball_Control
+
+
+
+```{r}
+ball_control.results <- f2(fifa.left$Ball_Control, fifa.right$Ball_Control)
+```
+El valor observat està per sobre de la zona d'acceptació, per tant rebutjem la hipòtesi nul·la. Anàlogament el valor de p-valor és inferior a 0.05, l'error que cometriem al rebutjar la hipòtesi nul·la de forma incorrecta és molt petit.
+
+Fem el càlcul amb la funció t.test:
+
+```{r}
+t.test(fifa.left$Ball_Control, fifa.right$Ball_Control,alternative="greater", var.equal=FALSE)
+```
+
+### Rating
+
+
+```{r}
+rating.results <- f2(fifa.left$Rating, fifa.right$Rating)
+```
+El valor observat 5.934 de l'estadístic de contrast està per sobre de la zona d'acceptació, per tant rebutjem la hipòtesi nul·la. A més el p-value és molt inferior al nivell de significança.
+
+Fem el càlcul amb la funció t.test:
+
+
+```{r}
+t.test(fifa.left$Rating,fifa.right$Rating, alternative="greater", var.equal=FALSE)
+```
+### Dribbling
+
+```{r}
+dribbling.results <- f2(fifa.left$Dribbling, fifa.right$Dribbling)
+```
+
+```{r}
+t.test(fifa.left$Dribbling,fifa.right$Dribbling, alternative="greater", var.equal=FALSE)
+```
+
+En els tres cassos és rebutja la hipòtessi nul·la en favor de la alternativa amb el que concluim que els jugadors esquerrans tenen millor Ball_Control, Rating i Dribbling que els dretans. 
+
+## Taula de resultats
+
+```{r}
+mean_Left <- c(ball_control.results$mean_Left, rating.results$mean_Left, dribbling.results$mean_Left)
+
+mean_Right <- c(ball_control.results$mean_Right, rating.results$mean_Right, dribbling.results$mean_Right)
+
+n_Left <- c(ball_control.results$n_Left, rating.results$n_Left, dribbling.results$n_Left)
+
+n_Right <- c(ball_control.results$n_Right, rating.results$n_Right, dribbling.results$n_Right)
+
+obs_value <- c(ball_control.results$obs_value, rating.results$obs_value, dribbling.results$obs_value)
+
+critical <- c(ball_control.results$critical, rating.results$critical, dribbling.results$critical)
+
+pvalue <- c(ball_control.results$pvalue, rating.results$pvalue, dribbling.results$pvalue)
+
+out <- data.frame( var=c("BallControl", "Rating",  "Dribbling"), 
+mean_Left=mean_Left,
+mean_Right=mean_Right, 
+n_Left=n_Left, 
+n_Right=n_Right, 
+obs_value=obs_value,
+critical=critical, 
+pvalue=pvalue)
+
+out %>% kable() %>% kable_styling()
+```
+## Interpretació
+
+Durant l'exercici 3 hem anat veient les conclusions a la creença popular de que els jugadors esquerrans tenen millor control de la pilota, valoració i dribbling. Efectivament a nivell numèric sembla que de mitjana aquests jugadors tenen millor valors.
+
+Primer ho hem pogut veure de forma gràfica. En els tres boxplot és veuen que tant els Q1, Q3, mediana i mínims i màxims són superiors en els jugadors de domini de peu esquerra. 
+
+Posteriorment hem aplicat els test d'hipòtesi on en els tres casos hem rebutjat la hipòtesi nul·la d'igualtat de mitjanes en favor de la hipòtesi alternativa, on mitjana del jugadors de domini de la pilota amb peu esquerra superior als del peu dret. En tots el casos l'error que es cometria en rebutjar la hipòtesi nul·la si aquesta fos certa és ínfim, edl p-value és molt petit.
+
+*****
+# Comparació per parells
+*****
+
+Volem saber si obtindriem els mateixos resultats comparant els jugadors de camp esquerrans amb els dretans que tinguin un pes, alçada i edat similar. Farem servir el procés Propensity score matching.
+
+## Jugador més similar
+
+Anem a buscar els jugadors més similars en termes d'alçada, pes i edat dels jugadors dretans i esquerrans. Fem servir un algoritme de distància per a trobar les semblançes.
+
+
+Primer agafarem dues mostres més reduïdes, ja que els càlculs per trobar els similars és costós.
+
+
+```{r}
+
+# primer agafem una mostra aleatòria de 100 dels jugadors esquerrans i després de 200 per els esquerrans
+
+nrow(fifa.left)
+random.left <- sample(1:nrow(fifa.left), 100)
+left.sample <- fifa.left[random.left,]
+nrow(left.sample)
+
+nrow(fifa.right)
+random.right <- sample(1:nrow(fifa.right), 200)
+right.sample <- fifa.right[random.right,]
+nrow(right.sample)
+
+
+```
+
+Montem les funcions euclidean, my.nn i my.nn.sample
+
+```{r}
+# com més propers més aprop de 0
+euclidean <- function(x1, x2){
+  return (sqrt(sum((x1-x2)^2)))
+}
+
+# funció per trobar el valor mes proper al jugador x en el dataset sample (jugadors dretans)
+my.nn <- function(x, right) {
+  
+  # inicialitzem amb el primer valor i la primera distància
+  nearest <- 1
+  
+  # calculem la distancia del primer
+  distance <- euclidean(x, select(right[1,], Height, Weight, Age))
+ 
+  # iterem per trobar el més proper
+  for (i in 2:dim(right)[1]) {
+    new_distance <-  euclidean(x, select(right[i,], Height, Weight, Age))
+    if (distance > new_distance) {
+      nearest <- i
+      distance <- new_distance
+      
+      # si la distancia és 0, no seguim
+      if (distance == 0)  break
+    }
+  }
+  return <- right[nearest,]
+}
+
+# funció per trobar tots el jugadors esquerrans més propers als dretans
+my.nn.sample <- function(left.sample, right.sample){
+  
+  # creem un dataframe buït amb el header de l'original (pot ser left.sample o right.sample)
+  right.paired <- data.frame()
+
+  for (i in 1:dim(left.sample)[1]) {
+    
+    # afagem només els atributs per calcular la distància
+    left.element <- select(left.sample[i,], Height, Weight, Age)
+
+    # busquem el més proper dels esquerrans
+    nearest <- my.nn(left.element, right.sample)
+    
+    # afeim al nou dataset      
+    right.paired <- rbind(right.paired, nearest)
+  }
+  return <- right.paired
+}
+```
+
+On cop creades les 3 funcions anem a executar el procés.
+
+```{r}
+right.paired <- my.nn.sample(left.sample, right.sample)
+```
+
+## Mostres
+
+Ara tenim el dataset amb els 200 element dels jugadors dretans i els 200 esquerrans més propers en quant a Height, Weight i Age
+
+```{r}
+# primers elements de right.paired
+head(select(right.paired, Height, Weight, Age))
+
+# primers elements de left.sample
+head(select(left.sample, Height, Weight, Age))
+```
+
+
+Un cop tenim les mostres anem a realitzar el test d'hipòtesi.
+
+## Hipòtesi nul·la i alternativa
+
+Podem veure visualment amb un gràfic bloxplot si el Rating d'aquestes dues mostres (jugadors dretans i esquerrans més similars) tenen una variació en la mediana, Q1, Q3, màxim i mínim.
+
+```{r}
+right.left <- rbind(right.paired, left.sample)
+
+ggplot(right.left) +
+  aes(x = Rating, y = Preffered_Foot) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal() +coord_flip()
+```
+
+Visualment en aquesta mostra sembla que els jugadors dretans siguin millors en Rating que els esquerrans però estem realitzant una comparació sense tenir en compte els aparellaments que hem fet.
+
+El que realitzarem és un test d'hipòtesi però amb les mostres aparellades, aquestes mostres no són aleatòries com en l'exercici anterior. Tenen una relació de dependència on la mostra dels dretans és en relació a la semblança en alçada, pes i edat als esquerrans.
+
+* Hipòtesi nul·la: els jugadors esquerrant són similars en Rating als jugadors similars en pes alçada i edat dels dretans.
+
+* Hipòtesi alternativa: els jugadors esquerrans són millors en Rating als jugadors similars en ped, alçada i edat dels dretans.
+
+
+## Mètode
+
+El mètode que aplicarem és:
+
+* Assumim distribució normal ja que les mostres tenen més de 30 elements.
+* Dues mostres aparellades. Les mostres no són aleatories sino que una és depenent de l'altre en funció de l'alçada, pes i edat dels jugadors.
+* Com no coneixem la variança de la població aplicarem t d'Student amb n-1 graus de llibertat.
+* Test unilateral:
+
+  * Ho: µd = 0 -> la diferència de mitjanes és 0. Això vol dir que no hi ha diferència de Rating
+  * H1: µd > 0 -> la diferència és más gran de 0. Els Rating dels esquerrans és millor que els dretans.
+  
+* Test paramètric.
+* Homocedasticitat o heterocedasticitat:
+
+Aplicarem la funció de l'apartat anterior vtype.
+  
+```{r}
+vtype(right.paired$Rating, left.sample$Rating)
+```
+El valor observat està dins la zona d'acceptació. A més pvalue està molt per sobre de 0.05 amb el que no podem rebutjar la hipòtesi nul·la i hem de deduïr homocedasticitat. Les variancies són iguals.
+
+
+## Càlculs
+
+Calcularem la diferència entre els Rating dels jugadors esquerrans i els jugadors dretans.
+
+```{r}
+difference <- left.sample$Rating - right.paired$Rating
+difference
+```
+Apliquem el test d'hipòtesi entre les dues mostres:
+
+```{r}
+# calculem la mitja de les diferències de les mostres
+mean.difference <- mean(difference)
+
+# desviació estandard de les diferències de les mostres
+sd.difference <- sd(difference)
+
+# nombre d'elements de la diferencia
+n.difference <- length(difference)
+
+# calculem el valor observat
+obs_value <- (mean.difference) / (sd.difference / sqrt(n.difference))
+cat("L'estadístic de contrast o valor observat és:", round(obs_value, 3), "\n")
+
+# graus de llibertat
+df <- n.difference - 1
+cat("Els graus de llibertat són:", round(df,1), "\n")
+  
+# valor crític on rebutjem la H0 en favor de la alternativa.
+# com volem la part superior de la corva, fem lower.tail = FALSE
+critical <- qt(0.005, lower.tail = FALSE, df=round(df-1))
+cat("La regió d'acceptació de la hipòtesi nul·la està entre ( -infinit,", critical, "]\n")
+
+# Càlcul del valor pvalue
+pvalue <- pt(obs_value, lower.tail = FALSE, df=round(df-1))
+cat("La probabilitat de que rebutjar la hipòtesi sigui incorrecte és:", pvalue, "]\n")
+
+```
+Fem el mateix càlcul però amb la funció d'R t.test
+
+```{r}
+t.test(left.sample$Rating, right.paired$Rating, paired=TRUE, alternative="greater")
+```
+
+## Interpretació
+
+Segons els resultats obtinguts no podem rebutjar la hipòtesi nul·la ja que el valor observat (-0.617) està dintre de la regió d'acceptació (-infinit, 2.626931]. A més, el valor del pvalue (0.7306676) és més gran que el valor alfa 0.05. Amb aquestes dades no podem rebutjar la H0 i no podem dir que els jugadors esquerrans tinguin millor Rating que els dretans. 
+
+## Reflexió
+
+Amb mostres totalment aleatories, els càlculs ens deien que el Rating era millor en els esquerrans que els dretans. En canvi, si agafem mostres aparellades en similitud física la hipòtesi inicial no és compleix.
+
+Per tant, amb aquestes dades no podria dir que els jugadors esquerrans siguin millor que els dretans quan aquests són físicament similars. En un conjunt global si que sembla que els jugadors esquerrans són millors que els dretans (exercici 3) però quan condicionem aquest test a uns altres atributs deixa de tenir vigència aquesta idea inicial.
+
+Aquest tipus de comparació ens podria ser útils si per exemple fossim captadors de nous talents i volguèssim cercar nous jugadors de qualitat. Realment no buscariem jugadors que fossin dretans o esquerrans sinó que tinguessin certes condicions físiques.
+
+*****
+# Comparació entre clubs
+*****
+
+Anem a comparar la qualitat dels jugadors entre el FC Barcelona i el Madrid. Concretament volem saber si el percentatge de jugadors amb Rating > 90 és igual o diferent entre el Barcelona i el Madrid amb un nivell de confiança del 97%.
+
+## Hipòtesi nul·la i alternativa
+
+* Hipòtesi nul·la: la proporció de jugadors amb Rating > 90 del Barcelona  és igual a la proporció del Madrid.
+
+* Hipòtesi alternativa: la proporció de jugadors amb Rating > 90 del Barcelona és diferent a la proporció del Madrid.
+
+
+## Mètode
+
+Aplicarem un test bilateral (volem saber si són iguals o diferents) de dues mostres sobre la proporció assumint que les dues mostres són grans.
+
+## Càlculs
+
+Seleccionem els grups de jugadors del Barça i del Madrid
+
+```{r}
+barcelona.players <- subset(fifa, fifa$Club == 'FC Barcelona') 
+madrid.players <- subset(fifa, fifa$Club == 'Real Madrid') 
+```
+
+Calculem les proporcions de jugadors amb Rating > 90
+
+```{r}
+p1 <- sum(barcelona.players$Rating > 90) / nrow(barcelona.players) 
+p1
+p2 <- sum(madrid.players$Rating > 90) / nrow(madrid.players)
+p2
+```
+Calculem la mitja de les proporcions, el valor observat, el valor crític i el p-valor :
+
+```{r}
+# nombre d'elements de les mostres
+n1 <- nrow(barcelona.players)
+n2 <- nrow(madrid.players)
+
+# mitja de les proporcions
+p <- (n1*p1 + n2*p2) / (n1+n2)
+cat("La mitja de la proporció de les mostres és: ", round(p, 3), "\n")
+
+# valor observat
+zobs <- (p1 - p2)/(sqrt(p * (1 - p) * ((1/n1) + (1/n2)) ))
+cat("El valor observat és: ", round(zobs, 3), "\n")
+
+# valor crític on rebutjem la H0 en favor de la alternativa.
+zcrit <- qnorm(0.03, lower.tail = FALSE)
+cat("El valor crític és:", round(zcrit, 3), "\n")
+
+# Càlcul del valor pvalue
+pvalue <- pnorm(zobs, lower.tail = FALSE)
+cat("El pvalor és:", round(pvalue, 3), "\n")
+
+```
+
+## Resultats i interpretació
+
+
+Amb aquests resultats no podem rebutjar la hipòtesi nul·la. El valor crític és 1.881 i el valor observat és 1.032 caient dins de la zona d'acceptació de la H0. A més, el valor del pvalue no és inferior a 0.03. Per tant, no podem dir que la proporció de jugadors amb Rating > 90 sigui diferent entre els jugadors del R. Madrid i el Barcelona.
+
+
+*****
+# Resum executiu
+*****
+
+Anem a resumir una mica els anàlisi inferencials que hem anat fent en els diferents exercicis.
+
+* Interval de confiança de la variable Rating:
+
+Podem dir amb un vivell de confiança del 95% que la mitjana de Rating es troba entre els valors [66.06 66.27].
+
+* Diferències entre els jugadors:
+
+També podem dir, amb un nivell de confiança del 95%, que els jugadors esquerrans tenen millor dribbling, valoració i control de pilota que els jugadors dretans.
+
+* Comparació per parells:
+
+En canvi, quan relacionem els jugadors esquerrans amb els dretans per similitud física, amb un nivell de confiança del 95%, això canvia. NO podem dir que els jugadors esquerrans amb físic similar tinguin millor Rating que els dretans.
+
+* Comparació entre clubs:
+
+Finalment, i ara amb nivell de confiança del 97%, no podem que els jugadors del R.Madrid tinguin un Rating diferent als jugadors del FC Barcelona. Tenen un Rating molt similar.

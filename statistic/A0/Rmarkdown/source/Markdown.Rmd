@@ -1,0 +1,233 @@
+---
+title: "Managing and Understanding Data"
+author: "Escribir vuestro nombre y apellidos"
+date: '`r format(Sys.Date(),"%e de %B, %Y")`'
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+bibliography: scholar.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r load_libraries, include=FALSE}
+library(knitr)
+```
+# R data structures
+
+The R data structures used most frequently in machine learning are *vectors*, *factors*, *lists*, *arrays*,
+and *data frames*.
+
+To find out more about statistical methods with R see [@teetor2011r;@hothorn2014handbook;@baayen2008analyzing].
+
+## Vectors 
+
+The fundamental R data structure is the **vector**, which stores an ordered set of
+values called **elements**. A vector can contain any number of elements. However, all
+the elements must be of the same type; for instance, a vector cannot contain both
+numbers and text.
+
+There are several vector types commonly used in machine learning:`integer`(numbers without decimals), `numeric` (numbers with decimals), `character` (text data),
+or `logical` (`TRUE` or `FALSE` values). There are also two special values: `NULL`, which is
+used to indicate the absence of any value, and `NA`, which indicates a missing value.
+
+Create vectors of data for three medical patients:
+
+```{r chunck1}
+# create vectors of data for three medical patients
+subject_name <- c("John Doe", "Jane Doe", "Steve Graves")
+temperature <- c(98.1, 98.6, 101.4)
+flu_status <- c(FALSE, FALSE, TRUE)
+```
+
+Access the second element in body temperature vector:
+
+```{r chunck2}
+# access the second element in body temperature vector
+temperature[2]
+```
+
+Examples of accessing items in vector include items in the range 2 to 3.
+
+```{r chunck3}
+## examples of accessing items in vector
+# include items in the range 2 to 3
+temperature[2:3]
+```
+
+Exclude item 2 using the minus sign
+```{r chunck4}
+# exclude item 2 using the minus sign
+temperature[-2]
+
+```
+
+Use a vector to indicate whether to include item
+
+```{r chunk 5}
+# use a vector to indicate whether to include item
+temperature[c(TRUE, TRUE, FALSE)]
+
+```
+
+# Exploring and understanding data
+
+After collecting data and loading it into R data structures, the next step in the
+machine learning process involves examining the data in detail. It is during this
+step that you will begin to explore the data's features and examples, and realize the
+peculiarities that make your data unique. The better you understand your data, the
+better you will be able to match a machine learning model to your learning problem.
+The best way to understand the process of data exploration is by example. In this
+section, we will explore the `usedcars.csv` dataset, which contains actual data about
+used cars recently advertised for sale on a popular U.S. website.
+
+Since the dataset is stored in CSV form, we can use the `read.csv()` function to load
+the data into an R data frame:
+
+```{r read}
+##### Exploring and understanding data --------------------
+
+## data exploration example using used car data
+usedcars <- read.csv("usedcars.csv", stringsAsFactors = FALSE)
+
+```
+
+## Exploring the structure of data
+One of the first questions to ask in your investigation should be about how data
+is organized. If you are fortunate, your source will provide a **data dictionary**, a
+document that describes the data's features. In our case, the used car data does not
+come with this documentation, so we'll need to create our own.
+
+
+```{r str}
+# get structure of used car data
+str(usedcars)
+
+```
+
+## Exploring numeric variables
+
+
+```{r explore}
+## Exploring numeric variables -----
+
+# summarize numeric variables
+summary(usedcars$year)
+summary(usedcars[c("price", "mileage")])
+
+# calculate the mean income
+(36000 + 44000 + 56000) / 3
+mean(c(36000, 44000, 56000))
+
+# the median income
+median(c(36000, 44000, 56000))
+
+# the min/max of used car prices
+range(usedcars$price)
+
+# the difference of the range
+diff(range(usedcars$price))
+
+# IQR for used car prices
+IQR(usedcars$price)
+
+# use quantile to calculate five-number summary
+quantile(usedcars$price)
+
+# the 99th percentile
+quantile(usedcars$price, probs = c(0.01, 0.99))
+
+# quintiles
+quantile(usedcars$price, seq(from = 0, to = 1, by = 0.20))
+```
+
+
+## Visualizing numeric variables - boxplots
+
+```{r graphics, fig.height=4, fig.width=6}
+
+# boxplot of used car prices and mileage
+boxplot(usedcars$price, main="Boxplot of Used Car Prices",ylab="Price ($)")
+
+boxplot(usedcars$mileage, main="Boxplot of Used Car Mileage",
+      ylab="Odometer (mi.)")
+
+# histograms of used car prices and mileage
+hist(usedcars$price, main = "Histogram of Used Car Prices",
+     xlab = "Price ($)")
+
+hist(usedcars$mileage, main = "Histogram of Used Car Mileage",
+     xlab = "Odometer (mi.)")
+
+# variance and standard deviation of the used car data
+var(usedcars$price)
+sd(usedcars$price)
+var(usedcars$mileage)
+sd(usedcars$mileage)
+
+```
+
+## Measuring spread - quartiles and the five-number summary
+
+The **five-number summary** is a set of five statistics that roughly depict the spread
+of a dataset. All five of the statistics are included in the output of the `summary()`
+function. Written in order, they are:
+
+1. Minimum (`Min.`)
+2. First quartile, or Q1 (`1st Qu.`)
+3. Median, or Q2 (`Median`)
+4. Third quartile, or Q3 (`3rd Qu.`)
+5. Maximum (`Max.`)
+
+## Measuring spread - variance and standard deviation
+
+In order to calculate the standard deviation, we must first obtain the **variance**, which
+is defined as the average of the squared differences between each value and the
+mean value. In mathematical notation, the variance of a set of `n` values of `x` is defined
+by the following formula. The Greek letter `mu` ($\mu$) (similar in appearance to an m)
+denotes the mean of the values, and the variance itself is denoted by the Greek letter
+`sigma` ($\sigma$) squared (similar to a b turned sideways):
+
+$$
+Var(X)= \sigma^2 = \frac{1}{n}\sum_{i=1}^n (x_i - \mu)^2
+$$
+
+
+The standard deviation is the square root of the variance, and is denoted by `sigma` as
+shown in the following formula:
+
+$$
+StdDev(X)= \sigma = \sqrt{\frac{1}{n}\sum_{i=1}^n (x_i - \mu)^2}
+$$
+
+
+*Note*. For more details on using mathematical expressions in Latex (R Markdown) see <https://es.sharelatex.com/learn/Mathematical_expressions>.
+
+
+
+##Table with information about mileage and price
+
+
+```{r}
+mileage_s<-summary(usedcars$mileage)
+price_s<-summary(usedcars$price)
+kable(rbind(mileage_s,price_s))
+```
+
+##Some descriptive graphics
+
+```{r}
+par(mfrow=c(2,2))
+hist(usedcars$mileage,xlab="Mileage",main="Histogram of mileage",col="grey85")
+hist(usedcars$price,xlab="Price",main="Histogram of price",col="grey85")
+usedcars$transmission<-factor(usedcars$transmission)
+plot(usedcars$mileage,usedcars$price,pch=16,col=usedcars$transmission,xlab="Mileage",ylab="Price")
+legend("topright",pch=16,c("AUTO","MANUAL"),col=1:2,cex=0.5)
+```
+
+#References
+

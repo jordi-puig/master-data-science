@@ -1,0 +1,420 @@
+---
+title: 'Mineria de dades: PAC1'
+author: "Autor: Jordi Puig Ovejero"
+date: "Març 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PAC-header.html
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+*****
+# Exercici:
+*****
+
+Estudia els tres casos següents i contesta justificant a la pregunta que es realitza:
+
+## Cas1
+*Disposem d'un conjunt de variables referents a vehicles, tals com la marca, model, any de matriculació, etc. També es té el preu al qual es van vendre. Donat un nou vehicle posat a la venda, del qual es tenen les variables, però es desconeix el preu, quin tipus d'algorisme s'hauria d'aplicar per a predir de forma automàtica el preu?*
+
+En aquest cas faria servir algoritmes predictius, ja que volem predir un valor de sortida a partir d'unes variables d'entrada.
+
+Podríem fer servir la regressió on establim una funció de regressió de les variables d'entrada (marca, model, any de matriculació...) amb la variable objectiu, en aquest cas el preu.
+
+## Cas2
+*En un magatzem de taronges es té una màquina que de forma automàtica obté un conjunt de variables de cada taronja, com la seva grandària, acidesa, grau maduració, etc. Si es desitja estudiar les taronges en diferents tipus segons les variables obtingudes, quin tipus d'algorisme és el més adequat?*
+
+La tècnica de data mining que faria servir seria una tècnica per a processos descriptius, ja que volem agrupar les taronges amb característiques similars.
+
+Com que no tenim grups predefinits haurem de fer servir la tècnica de clustering, amb la que trobarem grups similars a partir de les seves característiques.
+
+Un cop tinguéssim grups ja definits de taronges i volguéssim estudiar atributs d’aquests grups, podríem fer servir tècniques de classificació (xarxes neuronals, arbres de decisió o regles de classificació). Aquí hem de tenir prèviament coneixement sobre el domini.
+
+## Cas3
+*Un servei de música per internet disposa dels historials de escolta dels seus clients: Quines cançons i grups trien els clients al llarg del temps de les seves escoltes. L'empresa desitja crear un sistema d'escolta que proposi la següent cançó i grup en funció de l'anterior escoltada.  Quin tipus d'algorisme és el més adequat?*
+
+A partir de diferents atributs tant de la darrera cançó, com del grup que la interpreta podem trobar diferents etiquetes o atributs:
+
+* En els grups: tipus de música, època, estètica dels grups, país de procedència, ...
+* En les cançons: durada, idioma, tempo, ritme, volum, popularitat, contingut de la lletra, quantitat de lletra, acústica?..
+
+Amb aquests atributs podem aplicar una classificació dels elements per a després predir la cançó següent relacionada amb l’anterior.
+
+Segurament es podria també realitzar algun tipus d’aprenentatge si la cançó suggerida és omitida per l’usuari que està escoltant. 
+
+*****
+# Exercici:
+*****
+A partir del joc de dades disponible en el següent enllaç http://archive.ics.uci.edu/ml/datasets/adult , realitza un estudi prenent com a proposta inicial el que s'ha realitzat amb el joc de dades "Titànic". Amplia la proposta generant nous indicadors o solucionant altres problemes exposats en el mòdul 2. Explica el procés que has seguit, quin coneixement obtens de les dades, quin objectiu t'has fixat i detalla els passos, tècniques usades i els problemes resolts.
+
+Nota: Si ho desitges pots utilitzar un altre conjunt de dades propi o d'algun repositori dades obertes sempre que sigui similar en diversitat de tipus de variables al proposat.
+
+*****
+## Enunciat
+*****
+Com a mostra, treballarem amb el joc de dades "Adult Data Set" que recull dades de cens sobre la població dels EEUU i fa una predicció que avalua si els ingressos estan per sobre del $50 l'any.
+
+* Número d'instàncies: 48842
+* Tipus d'atributs: Categòric i Enter
+* Nombre d'atributs: 14
+* Any del cens: 1994
+* Missing values: Sí
+
+*****
+## Font
+*****
+
+http://archive.ics.uci.edu/ml/datasets/adult
+
+Ronny Kohavi and Barry Becker
+Data Mining and Visualization
+Silicon Graphics.
+
+*****
+## Processos de neteja del joc de dades
+*****
+
+Primer contacte amb el joc de dades, visualitzem la seva estructura.
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Carreguem els paquets R que utilitzarem
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(dplyr)
+
+# Carreguem el fitxer de dades
+totalData <- read.csv('adult.csv', stringsAsFactors = FALSE)
+filas=dim(totalData)[1]
+
+
+# Verifiquem l'estructura del joc de dades
+str(totalData)
+```
+
+### Descripció de les variables contingudes al fitxer:
+
+* age: valor numèric amb l'edat de l'usuari en el moment de la mostra. Aquest valor està per sobre de 16 (age > 16).
+    
+* workclass: valor categòric per a definir el tipus de treball realitzat.
+    
+* fnlwgt: valor numèric que identifica a quin grup sociocultural pertany l'element de la mostra. Valors similars han d'identificar elements similars. El valor mínim és 2 (fnlwgt > 1)
+    
+* education: valor categòric amb la formació acadèmica.
+    
+* education.num: valor numèric que identifica la formació acadèmica.
+    
+* marital.status: valor categòric per a definir l'estat civil
+    
+* occupation: valor categòric amb la professió que realitza
+    
+* relationship: valor categòric per identificar quina posició té dins del grup familiar
+    
+* race: valor categòric per a indicar a quina raça pertany.
+    
+* sex: valor categòric per a indicar a quin sexe pertany.
+    
+* capital.gain: valor numèric indicant els ingressos obtinguts anuals. Serien els actius de l'element de la mostra 
+
+* capital.loss: valor numèric indicant les despeses realitzades anuals. Serien els passius de l'element de la mostra 
+
+* hours.per.week: valor numèric amb les hores treballades setmanalment
+    
+* native.country: valor categòric indicant el país de procedència
+
+* exceed: valor categòric que prediu si excedeix l'ingrés de 50.000$ anuals. Té connotació booleana. (Cert/Fals)
+
+
+### Traiem estadístiques bàsiques  
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Estadístiques bàsiques
+summary(totalData)
+```
+
+Dins de la mostra podem observar:
+
+* age: la mitjana aritmètica o mostral és de 38.58 i la mediana 37. Em sembla relativament jove comparant-la amb la d'Espanya que és de 42. El valor mínim es de 17 i el màxim 90.
+* education.num: la mediana és de 10 (correspon a HS-grad).
+* race: la gran majoria de les persones són de raça blanca.
+* sex: hi ha el doble de persones de sexe masculí respecte al femení.
+
+### Tractament dels valors buits
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# El document adult.data té els valor buits transformats a '?'
+# Per tant no hi ha cap com a buit (missign value)
+colSums(is.na(totalData))
+# Però si amb el valor ja transformat a '?'
+colSums(totalData=="?")
+
+# Tenim elements buits a workclass, occupation, native.country
+# Comprovem quant respresenten respecte al total
+total <- nrow(totalData)
+# Percentatge de buits de workclass
+turnover <- nrow(subset(totalData, workclass == "?")) / total
+pctworkclass <- percent(turnover, accuracy = 0.01)
+pctworkclass
+
+# Percentatge de buits de l'atribut occupation respecte el total
+turnover <- nrow(subset(totalData, occupation == "?")) / total
+pctoccupation <- percent(turnover, accuracy = 0.01)
+pctoccupation
+
+# Percentatge de buits de l'atribut native.country respecte el total
+turnover <- nrow(subset(totalData, native.country == "?")) / total
+pctcountry <- percent(turnover, accuracy = 0.01)
+pctcountry
+
+# En principi no modificarem els valors buits. Agafarem subconjunts a l'hora de tractar les dades, és a dir, ometrem registres amb valor '?' per als estudis.
+subset <- subset(totalData, native.country != "?")
+subset <- subset(subset, occupation != "?")
+subset <- subset(subset, workclass != "?")
+# Ara subset no te els valors amb elements "?". De totes maneres, treballem amb totalData i els eliminarem quan toqui.
+```
+
+
+### Discretització
+Discretitzem els valors categòrics
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Mirem el nombre d'elements diferents per a cada classe
+apply(totalData,2, function(x) length(unique(x)))
+# Discretitzem les variables amb poques classes. Podríem discretitzar "education" per ja ho està 
+cols<-c("marital.status","relationship","race","sex", "occupation", "exceed", "workclass")
+for (i in cols){
+  totalData[,i] <- as.factor(totalData[,i])
+}
+
+# Després dels canvis, analitzem la nova estructura del joc de dades
+str(totalData)
+```
+
+*****
+## Processos d’anàlisis del joc de dades
+*****
+
+### Vegem un exemple de construcció d'un atribut nou: "exceed" com a boolean
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+
+# Construïm un atribut nou: "exceed.bool"
+# Boolean per indicar si té una prediccio de superar els $50K i mostrem gràfic respecte aquesta variable.
+totalData$exceed.bool <- totalData$exceed == ">50K"
+ggplot(data=totalData[1:filas,],aes(x=exceed.bool,fill=exceed.bool))+geom_bar()
+```
+
+La proporció d'usuaris que excedeixen és força inferior als que no.
+
+### Relació entre "exceed" i "sex"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Ara veiem la relació en funció del sexe
+ggplot(data=totalData[1:filas,],aes(x=sex,fill=exceed)) + geom_bar(position="fill") + ylab("Frequency")
+```
+
+Com era de preveure la proporció dels elements que superen els $50K és molt superior en els homes que en les dones, més tenint en compte que la mostra té més de 20 anys, és dels anys 90 on aquestes diferències eran més grans.
+
+### Relació entre "exceed" i "race"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de la raça
+ggplot(data=totalData[1:filas,],aes(x=race,fill=exceed)) + geom_bar() + coord_flip()
+
+```
+
+Si en el gràfic anterior es poden veure les diferències econòmiques per gènere, en aquest es poden apreciar per raça on es veu que predomina molt més la blanca sobre les altres, les quals, no tenen quasi probabilitats d'arribar a aquests ingressos.
+
+Si *normalitzem* l'atribut "race"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Variable nova amb l'atribut 'race' normalitzat en una escala 0,1
+ggplot(data=totalData[1:filas,],aes(x = race, fill=exceed)) + geom_bar(position="fill") + ylab("Frequency")+ coord_flip()
+```
+
+Al normalitzar veiem realment la proporció real i no hi ha tanta diferència proporcional entre els blancs i els asiàtics. Sí amb la resta de categories.
+
+### Relació entre "exceed" i "marital.status"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de marital.status
+ggplot(data=totalData[1:filas,],aes(x=marital.status,fill=exceed)) + geom_bar(position="fill") + ylab("Frequency")+ coord_flip()
+
+```
+
+Com a curiositat, sembla que les "famílies tipus" de llavors tenen més opcions d'arribar a aquests salaris que no pas altres.
+
+
+### Relació entre "exceed" i "education"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de education
+# primer ordenem per education.num ascendent entenent que aquest valor indicarà el nivell d'estudis
+ggplot(data=totalData[1:filas,],aes(x=reorder(education, education.num) ,fill=exceed)) + geom_bar(position="fill") + ylab("Frequency")+ coord_flip()
+```
+
+La relació entre el nivell d'estudis i excedir els $50K és molt gràfica.
+
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# ara li afegim la variable sexe
+ggplot(data = totalData[1:filas,],aes(x=reorder(education, education.num),fill=exceed))+geom_bar(position="fill")+facet_wrap(~sex)+ coord_flip()
+```
+
+No canvia gaire moltíssim la forma, però has de tenir més formació per ser dona i superar els $50K
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# el mateix d'abans però amb "race"
+ggplot(data = totalData[1:filas,],aes(x=reorder(education, education.num),fill=exceed))+geom_bar(position="fill")+facet_wrap(~race)+ coord_flip()
+```
+
+Sembla que els més desafavorits són els Indis-Americans
+
+### Relació entre "exceed" i "age"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de age
+ggplot(data=totalData[1:filas,],aes(x=age,fill=exceed)) + geom_bar(position="fill") + ylab("Frequency")
+```
+
+No és poden treure dades molt concloents. Pot ser que la probabilitat de superar els $50K en funció de l'edat fa una forma de distribució normal de l'edat i que el pic és al voltant dels 50.
+
+### Relació entre "exceed" i "age", *dicretitzant una variable continua (K-Means Clustering)*
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de age discretitzat amb 4 rangs
+# com que el resultat final de k-means clustering result és sensible a les assignacions inicials aleatòries, especifiquem nstart = 25. Això vol dir que R intentarà 25 assignacions inicials aleatòries diferents i aleshores  seleccionarà els millors resultats corresponents al mínim del clúster. variació. El valor per defecte de nstart a R és un. Tanmateix, és molt recomanable calcular un clustering de k-means amb un gran valor de nstart com 25 o 50, per obtenir un resultat més estable.
+ageclusters <- kmeans(totalData$age, 4, nstart = 25)
+# veiem dades de la discretització
+str(ageclusters)
+# afegim la variable discretitzada a la data original
+datacluster <- cbind(totalData, ageclusters$cluster)
+# mostrem les dades i veiem que està afegit al data
+str(datacluster)
+# mostrem exceed en funció de age discretitzat per K-Mean amb 5 elements
+ggplot(data=datacluster[1:filas,],aes(x=ageclusters$cluster,fill=exceed)) + geom_bar(position="fill") + ylab("Frequency")
+```
+
+### Relació entre "exceed" i "occupation"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de occupation
+ggplot(data=totalData[1:filas,],aes(x=occupation,fill=exceed)) + geom_bar(position="fill") + ylab("Frequency") + coord_flip()
+```
+
+Les feines millor remunerades són Exec-managerial (Manager) i Prof-specialty (Professionals Tècnics?). Les pitjor 
+empleats de la llar.
+
+### Relació entre 3 variables entre "exceed", "sex", "race"
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# variable exceed en funció de sex i race
+ggplot(data = totalData[1:filas,],aes(x=sex,fill=exceed))+geom_bar(position="fill")+facet_wrap(~race)+ coord_flip()
+```
+
+Només en Amer-Indian-Eskimo (Indígenas dels Estados Unidos i esquimals) tenen una proporció similar entre sexe.
+
+### Relació entre "education" i "workclass" amb un altre histograma
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Primer eliminem els valors buits de workclass 
+subset <-subset(totalData, workclass != "?")
+
+g <- ggplot(subset, aes(x=reorder(education, education.num)))
+g + geom_bar(aes(fill=workclass), width = 0.5) + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + 
+  labs(title="Education vs Workclass")
+
+
+```
+
+La gran majoria han estudiat fins a HS-grad i treballen en el sector privat.
+
+
+
+### Relació entre "sex" i "workclass" amb un altre histograma
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Primer eliminem els valors buits de workclass 
+subset <-subset(totalData, workclass != "?")
+ggplot(subset,aes(x=sex,fill=workclass), width = 0.5) + geom_bar(position="fill") + ylab("Frequency") + coord_flip()
+
+```
+
+### Hores a la setmana treballades en funció de la feina realitzada
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# eliminem els buits
+# eliminem "Without-pay" i "Never-worked"
+subset <-subset(totalData, workclass != "?")
+subset <-subset(subset, workclass != "Without-pay")
+subset <-subset(subset, workclass != "Never-worked")
+# creem l'escala d'hores per setmana
+min <- min(subset$hours.per.week)
+max <- max(subset$hours.per.week)
+scale <- abs((min - max) / 10)
+str(min)
+str(max)
+str(scale)
+
+ggplot() + geom_boxplot(subset = iris, aes(x = subset$hours.per.week, y = subset$exceed)) + scale_x_continuous(breaks = seq(from = 0, to = max, scale)) + xlab("Hours x Week") + ylab("Exceed")
+
+
+```
+
+Es evident que la majoria de gent fa una mitja de 40 hores a la setmana. La gent que té la probabilitat de cobrar més de $50K han de fer mes hores que els que no.
+
+
+### Age en funció de 'finalweight' -> >$50K 
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+min <- min(totalData$fnlwgt)
+max <- max(totalData$fnlwgt)
+scale <- abs((min - max) / 5)
+str(min)
+str(max)
+str(scale)
+
+ggplot() + geom_point(totalData = iris, aes(x = totalData$fnlwgt, y = totalData$age, color = totalData$exceed)) +
+  scale_x_continuous(breaks = seq(from = min, to = max, scale))  + xlab("fnlwgt") + ylab("age")
+
+```
+
+La gràfica mostra el "fnlwgt" (Final Weight, que defineix conjunst socioeconòmics similars per valors similars) en funció de l'edat, alhora pintant si excedeixen o no. Els punts que excedeixen estan força dispersos en tota la franja de fnlwgt i per edat tornem a veure que es concentren al voltant dels 50.
+
+### Construcció d'un atribut nou: capital.diff
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# Construïm un atribut nou: capital.diff
+totalData$capital.diff <- totalData$capital.gain - totalData$capital.loss
+subset <- subset(totalData, capital.diff != 0)
+str(subset)
+count(subset)
+min <- min(subset$capital.diff)
+max <- max(subset$capital.diff)
+scale <- abs((min - max) / 5)
+str(min)
+str(max)
+str(scale)
+
+ggplot() + geom_point(subset = iris, aes(x = subset$capital.diff, y = subset$age, color = subset$exceed)) +
+  scale_x_continuous(breaks = seq(from = min, to = max, scale)) + xlab("capital.diff") + ylab("age")
+  
+```
+
+Sembla que a partir d'una diferència entre ingrés i despesa de capital per sobre d'un valor X (??) tenen moltes possibilitats de tenir uns ingressos per sobre dels $50K.
+
+Anem a esborrar extrems:
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+# eliminem valors per sobre de 17000
+totalData$capital.diff <- totalData$capital.gain - totalData$capital.loss
+subset2 <- subset(totalData, capital.diff <= 17000)
+str(subset2)
+count(subset2)
+min <- min(subset2$capital.diff)
+max <- max(subset2$capital.diff)
+scale <- abs((min - max) / 25)
+str(min)
+str(max)
+str(scale)
+
+ggplot() + geom_point(subset2 = iris, aes(x = subset2$capital.diff, y = subset2$age, color = subset2$exceed)) +
+  scale_x_continuous(breaks = seq(from = min, to = max, scale)) + xlab("capital.diff") + ylab("age") + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  
+```
+
+Curiós perquè a partir del capital.diff d'uns 5000$ la probabilitat es dispara però alhora, els que tenen una capital.diff negatiu per sota de -2000 també.

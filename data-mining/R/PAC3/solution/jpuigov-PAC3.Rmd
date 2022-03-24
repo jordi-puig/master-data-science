@@ -1,0 +1,751 @@
+---
+title: 'Mineria de dades: PAC3 - Classificació amb arbres de decisió'
+author: "Autor: Jordi Puig OVejero"
+date: "Maig 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PAC-header.html
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+  word_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+Carrega de les llibreries que es necessiten
+```{r message= FALSE, warning=FALSE}
+library(ggplot2)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(arules)
+library(rattle)
+library(rpart.plot)
+library(RColorBrewer)
+library(rpart)
+library(class)
+```
+
+******
+# Introducció
+******
+Aquesta prova d'avaluació contínua cobreix el Mòdul 3 (Classificació: arbres de decisió) i el Mòdul 8 (Avaluació de models) del programa de l'assignatura.
+
+******
+# Joc de dades
+******
+Per a realitzar la PAC he agafat un joc de dades extret de UC Irvine Machine Learning Repository: **[Heart Disease Data Set]** (https://archive.ics.uci.edu/ml/datasets/Heart+Disease). 
+
+En aquest joc de dades a partir d'una sèrie de característiques de pacients d'un hospital, tenim una variable de sortida que ens diu si l'individu pateix algun tipus de patologia cardíaca o no.
+
+El camp "target" fa referència a la presència de malalties del cor en el pacient. És un valor enter de 0 o 1, amb l'absència de malaltia (target = 0) o presencia de malaltia (target = 1).
+
+* Nombre d'instàncies: 303
+* Nombre d'atributs: 13 variables d'entrada + 1 variable de sortida (14 atributs en total)
+* Nombre de missing values: 0
+
+## Definició dels atributs
+
+**Dades del pacient:**
+
+* 1 age: edat del pacient - Numèric
+* 2 sex: sexe del pacient - Numèric -> convertirem a Categòric
+    - 0 = dona
+    - 1 = home
+* 3 cp: tipus de dolor al pit - Numèric -> convertirem a Categòric
+    - 0 = asimptomàtics
+    - 1 = angina atípica
+    - 2 = dolor no anginós
+    - 3 = angina típic
+* 4 trestbps: pressió arterial en repòs (en mmHg a l’ingrés a l’hospital) - Numèric
+* 5 chol: colesterol sèric en mg/dl - Numèric
+* 6 fbs: sucre en sang en dejuni > 120 mg/dl) - Numèric -> convertirem a Categòric
+    - 0 = fals
+    - 1 = cert
+* 7 restecg: resultats electrocardiogràfics en repòs - Numèric -> convertirem a Categòric
+    - 0 = mostrant una probabilitat d'hipertròfia definida del ventricle esquerre
+    - 1 = normal    
+    - 2 = amb anormalitat d'ona ST-T (inversions d'ona T i/o elevació o depressió de ST>> 0,05 mV)
+* 8 thalach: freqüència cardíaca màxima assolida
+* 9 exang: angina induïda per l'exercici - Numèric -> convertirem a Categòric
+    - 0 = no
+    - 1 = sí
+* 10 oldpeak: depressió ST induïda per l’exercici amb relació al descans - Numèric
+* 11 slope: el pendent del segment ST exercici punta - Numèric -> convertirem a Categòric
+    - 0 = downsloping
+    - 1 = flat
+    - 2 = upsloping
+* 12 ca: nombre de vasos principals (0..4) acolorits per la fluoroscòpia
+* 13 thal: Numèric:
+    - 1 = defecte curat 
+    - 2 = normal
+    - 3 = defecte reversible
+    
+**Variable de sortida:**
+
+* 14 target - el pacient presenta malaltia - Numèric -> convertirem a Categòric
+    - 0 = no
+    - 1 = sí
+
+******
+# Anàlisi exploratori
+******
+Carreguem les dades
+```{r message= FALSE, warning=FALSE}
+heart.data <- read.csv('heart.csv',stringsAsFactors = TRUE, sep = ',')
+attach(heart.data) # ens permet referenciar les columnes de bank sense haver de especificar el dataset.
+```
+
+## Analisi de les dades
+Convertim a categòrics alguns camps i fem un anàlisi exploratori de la base de dades importada.
+```{r}
+# convertim a categòrics i visualitzem les dades i donem etiquetes, ens permetre veure millor les dades
+heart.data$sex <- factor(heart.data$sex)
+levels(heart.data$sex) <- c("female", "male")
+heart.data$cp <- factor(heart.data$cp)
+levels(heart.data$cp) <- c("asymptomatic","atypical","non-anginal","típic")
+heart.data$fbs <- factor(heart.data$fbs)
+levels(heart.data$fbs) <- c("false", "true")
+heart.data$restecg <- factor(heart.data$restecg)
+levels(heart.data$restecg) <- c("hypertrophy","normal","stt")
+heart.data$exang <- factor(heart.data$exang)
+levels(heart.data$exang) <- c("no","yes")
+heart.data$slope <- factor(heart.data$slope)
+levels(heart.data$slope) <- c("downsloping","flat","upsloping")
+heart.data$ca <- factor(heart.data$ca) # no cal fer conversions
+heart.data$thal <- factor(heart.data$thal)
+levels(heart.data$thal) <- c("","fixed","normal","reversable")
+heart.data$target <- factor(heart.data$target)
+levels(heart.data$target) <- c("no","yes")
+
+summary(heart.data)
+x <- dim(heart.data)
+paste("Nombre de registres:", x[1])
+paste("Nombre de columnes:", x[2])
+paste("Nombre de valors nulls:", sum(is.na(heart.data)))
+```
+
+Veiem la següent informació a primera ullada:
+
+* age: la mitjana és de 54.37 anys, el més gran 77 i el més jove 29.
+* sex: tenim molts més homes que dones.
+* cp: gran part de la mostra arriba sense símptomes
+* chol: el colesterol es mou en valors força alts.
+* fbs: quasi un 15% tenen sucre en dejú.
+* thalach: la mitjana de la freqüència cardíaca en repòs és de 149.6.
+* target: un 54.5% de la mostra tenen patologia cardíaca.
+* thal: hi ha dos valors que no tenen etiqueta.
+* ca: tenim 5 valors que estan fora de rang.
+
+## Neteja de valors
+Tenim valors fora de rang tant a 'thal' com a 'ca'. Anem a netejar aquests registres.
+```{r}
+heart.data <- subset(heart.data, ca != 4)
+heart.data <- subset(heart.data, thal != '')
+heart.data <- droplevels(heart.data)
+summary(heart.data)
+```
+
+
+******
+# Distribucións de les variables
+******
+
+Com anem a executar molts cops algunes sentències, crearem funcions i executarem.
+```{r}
+
+# genera taula amb grups
+groups <- function (data, column) {
+  ret <- data %>%  group_by(data[,column]) %>% summarise (n = n()) %>% mutate(freq = signif(n / sum(n) * 100, 3))
+  ret <- setNames(ret, c(column, "patients", "freq"))
+  return (ret)
+}
+
+# retorna distribució
+customPlotDist <- function(df, .x_var, .y_var) {
+  # convert strings to variable
+  x_var <- sym(.x_var)
+
+  groups <- groups(df, .x_var)
+
+  return (ggplot(groups, aes(x = !! x_var, y = patients, fill=!! x_var)) + geom_bar(stat = "identity") +  geom_text(size=3, aes(label = patients), vjust = -0.3) + geom_text(size=3, aes(label = paste(freq, "%")), vjust = 2)) + ylab("Patients") 
+}
+
+# retorna conversió de 'y' normalitzada
+customPlotNorm <- function(df, .x_var, .y_var) {
+  x_var <- sym(.x_var)
+  y_var <- sym(.y_var)
+  return (ggplot(data=df,aes(x= !! x_var, fill = !! y_var)) + geom_bar(position="fill") + ylab("Probability") ) 
+}
+
+```
+
+## Variable de sortida 'target'
+
+```{r message= FALSE, warning=FALSE}
+ggplot(data=heart.data,aes(x=target,fill=target)) + geom_bar()
+table(heart.data$target)
+cat("La taxa de individus amb patologia és de:", round(100*(160)/(160 + 136), 2), "%")
+```
+
+Tenim un 54.05% del total de la mostra que presenten una patologia cardíaca.
+
+## Variables categòriques
+
+### Estudi de l'atribut 'sex':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'sex', 'target')
+plotNorm <- customPlotNorm(heart.data, 'sex', 'target')
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+Encara que la mostra té més homes que dones, sembla que les dones, en la mostra, tenen més tendèndia a tenir malaltia cardíaca. 
+
+### Estudi de l'atribut 'cp':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'cp', 'target') + ggpubr::rotate_x_text()
+plotNorm <- customPlotNorm(heart.data, 'cp', 'target') + ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+Clarament, els que no presenten dolor al pit, que és quasi la meitat de la mostra, tenen molt menys percentatge de patir malaltia cardíaca. 
+
+### Estudi de l'atribut 'fbs':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'fbs', 'target')
+plotNorm <- customPlotNorm(heart.data, 'fbs', 'target')
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+La dada de sucre en sang per si sola no ens diu gaire cosa apart que més del 85.5% no en presenten.
+
+
+### Estudi de l'atribut 'restecg':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'restecg', 'target')+ ggpubr::rotate_x_text()
+plotNorm <- customPlotNorm(heart.data, 'restecg', 'target')+ ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+La dada del electrocardiograma en repós, és la que més em sobta ja que l'atribut que dona normalitat té una tendencia a tenir malaltia més que no pas els altres valors de la categoria. 
+
+### Estudi de l'atribut 'exang':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'exang', 'target')
+plotNorm <- customPlotNorm(heart.data, 'exang', 'target')
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+L'angina no induïda per exercici dona un valor alt en quant a probabilitat de tenir malaltia. Es a dir, si el dolor al pit s'ha produït per exercici serà menys probable tenir malaltia que no pas si el dolor no ve produït per l'exercici i és un dolor espontani.
+
+### Estudi de l'atribut 'slope':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'slope', 'target') + ggpubr::rotate_x_text()
+plotNorm <- customPlotNorm(heart.data, 'slope', 'target') + ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+El valor upsloping de l'atribut, indica força probabilitat de malaltia. 
+
+### Estudi de l'atribut 'ca':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'ca', 'target')
+plotNorm <- customPlotNorm(heart.data, 'ca', 'target')
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+Aquesta gràfica és progressiva, com més vassos es veuen en la flouroscopia, molt millor per al pacient. Si no es veu cap, el risc és alt.
+
+### Estudi de l'atribut ' thal':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'thal', 'target')+ ggpubr::rotate_x_text()
+plotNorm <- customPlotNorm(heart.data, 'thal', 'target')+ ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotNorm,ncol=2)
+```
+
+Si la thalassemia és normal (és una malaltia que provoca un desordre de la producció d'hemoglobina), el problema és més candidat a ser un problema cardíac que no causat per aquesta altra enfermetat.
+
+
+## Variables numèriques
+
+### Estudi de l'atribut 'age':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'age', 'target') + ggpubr::rotate_x_text()
+plotNorm <- customPlotNorm(heart.data, 'age', 'target') + ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotNorm,ncol=1)
+```
+
+
+
+Com més joves els pacients que es dirigeixen a l'hospital més probabilitat que hi hagi un problema. Encara que hi ha una mostra, menors de 40 anys que hi ha pocs valors. Entre 40 i 55 el risc és més alt.
+
+### Estudi de l'atribut 'trestbps':
+```{r message= FALSE, warning=FALSE}
+grid.newpage()
+plotDist <- customPlotDist(heart.data, 'trestbps', 'target') + ggpubr::rotate_x_text() 
+plotDist2 <- ggplot(heart.data, aes(trestbps)) + geom_histogram(bins = 35) + ylab("Patients") + xlab("trestbps")
+plotNorm <- customPlotNorm(heart.data, 'trestbps', 'target') + ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotDist2,plotNorm,ncol=1)
+```
+
+No podem definir gaire cosa. Hauríem de discretitzar a veure si podem apreciar alguna tendència.
+
+```{r message= FALSE, warning=FALSE}
+heart.data.discret <- heart.data
+trestbps.discret <- discretize(heart.data.discret$trestbps,  method = "frequency", breaks = 6)
+heart.data.discret$trestbps <- trestbps.discret
+
+
+grid.newpage()
+plotDist <- customPlotDist(heart.data.discret, 'trestbps', 'target') 
+plotNorm <- customPlotNorm(heart.data.discret, 'trestbps', 'target')
+grid.arrange(plotDist,plotNorm,ncol=1)
+```
+
+No podem veure cap patró a partir de la tensió arterial.
+
+### Estudi de l'atribut 'chol':
+
+Fem l'estudi amb l'atribut dicretitzat.
+
+```{r message= FALSE, warning=FALSE}
+heart.data.discret <- heart.data
+chol.discret <- discretize(heart.data.discret$chol,  method = "frequency", breaks = 6)
+heart.data.discret$chol <- chol.discret
+grid.newpage()
+plotDist <- ggplot(heart.data, aes(chol)) + geom_histogram(bins = 50) + ylab("Patients") + xlab("chol")
+plotDist2 <- customPlotDist(heart.data.discret, 'chol', 'target')
+plotNorm <- customPlotNorm(heart.data.discret, 'chol', 'target')
+grid.arrange(plotDist, plotDist2,plotNorm,ncol=1)
+```
+
+El mateix ens passa amb el colesterol. Per si sol, no sembla un bon indicatiu.
+
+### Estudi de l'atribut 'thalach':
+```{r message= FALSE, warning=FALSE}
+heart.data.discret <- heart.data
+thalach.discret <- discretize(heart.data.discret$thalach,  method = "frequency", breaks = 6)
+heart.data.discret$thalach <- thalach.discret
+
+
+grid.newpage()
+plotDist2 <- ggplot(heart.data, aes(thalach)) + geom_histogram(bins = 50) + ylab("Patients") + xlab("thalach")
+plotDist <- customPlotDist(heart.data.discret, 'thalach', 'target') 
+plotNorm <- customPlotNorm(heart.data.discret, 'thalach', 'target')
+grid.arrange(plotDist2, plotDist,plotNorm,ncol=1)
+```
+
+Aquí si que tenim un patró bastant clar. A mesura que augmenta la freqüència cardíaca, augmenta la probabilitat de malaltia. 
+
+
+### Estudi de l'atribut 'oldpeak':
+
+```{r message= FALSE, warning=FALSE}
+heart.data.discret <- heart.data.discret
+
+oldpeak.discret <- discretize(heart.data.discret$oldpeak,  method = "cluster", breaks = 6)
+heart.data.discret$oldpeak <- oldpeak.discret
+
+
+grid.newpage()
+plotDist <- customPlotDist(heart.data.discret, 'oldpeak', 'target') + ggpubr::rotate_x_text()
+plotNorm <- customPlotNorm(heart.data.discret, 'oldpeak', 'target') + ggpubr::rotate_x_text()
+grid.arrange(plotDist,plotNorm,ncol=1)
+
+```
+
+Veiem una tendència decremental en quant a risc. Com més baix és el valor del oldpeak més risc de malaltia cardíaca.
+
+
+## Combinació de variables
+
+Anem a fer alguna combinació de variables. Per fer-ho, primer hem tret una matriu amb la relació que hi ha entre les variables i veure com "impacten" entre elles i concretament amb la variable target.
+
+```{r}
+heart.data.tmp <- heart.data
+for (colname in colnames(heart.data.tmp)) {
+  heart.data.tmp[colname] <- lapply(heart.data.tmp[colname],as.integer)
+}
+corr.mat <- cor(heart.data.tmp)
+# visualize it
+library(corrplot)
+corrplot(corr.mat)
+```
+
+Podem visualitzar la matriu de correlació entre els diferents atributs, quina relació hi ha entre les variables. És a dir, veiem la dependència lineal i pressuposem una relació. Els valors més allunyats del 0 són els que tenen una relació més estreta entre ells a nivell lineal.
+
+Veiem com a correlació positiva: thalach, cp, slope
+Veiem com a correlació negativa: age, exang, oldpeak, ca, thal 
+
+Ens aprofitem de les dades que hem tret, i veurem alguns gràfics amb la relació entre aquestes dades.
+
+### Estudi de l'atribut 'thalach' i 'ca':
+
+```{r}
+heart.data.discret <- heart.data
+heart.data.discret$thalach <- discretize(heart.data.discret$thalach,  method = "frequency", breaks = 6)
+
+ggplot(data = heart.data.discret,aes(x=thalach,fill=target)) + geom_bar(position="fill") + facet_wrap(~ca)+ coord_flip()
+```
+
+La comparativa ens diu molt. Si no es veu cap vas sanguini cp=0 i la freqüència augmenta és quan veiem que el 'yes' té una rellevància molt alta. Podríem intuir una regla, (si cp = 0 && thalach > 152 => 'yes')
+
+
+
+### Estudi de l'atribut 'thalach' i 'exang':
+
+```{r}
+heart.data.discret <- heart.data
+heart.data.discret$thalach <- discretize(heart.data.discret$thalach,  method = "frequency", breaks = 6)
+
+ggplot(data = heart.data.discret,aes(x=thalach,fill=target)) + geom_bar(position="fill") + facet_wrap(~exang)+ coord_flip()
+```
+
+Similar a l'exemple anterior, si l'angina no és produïda per l'exercici (exang=no) i tenim pulsacions més altes, la franja verda (sí presenta malaltia cardíaca) quasi ocupa tota la proporció i quasi podriem inferir una altre regla.
+
+
+******
+# Arbre de decissió
+******
+
+## Preparació de les dades
+
+Anem a preparar les dades per a avaluar l'arbre de decisió. Dividim en conjunt de prova i conjunt d'entrenament. Un el fem servir per a construir el model del arbre de decissió i el de prova per avaluar quina precissió obtenim d'aquest arbre. Fem servir la proporció 2/3 entrenament, 1/3 avaluació. La variable a avaluar és el target.
+
+```{r}
+summary(heart.data)
+
+## obetnim primer una mostra del total de forma aleatoria (hem guardat físicament aquest random per poder reproduïr el mateix i el carreguem de disc)
+
+# random.data <- sample(1:nrow(heart.data), 0.66 * nrow(heart.data))
+# write.csv(random.data,"random-data.csv")
+
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+# separem el 66% de conjunt d'entrenament del 34% per a avaluar
+data.train <- heart.data[random.data,]
+data.test <- heart.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:13]
+train.y <- data.train[,14]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:13]
+test.y <- data.test[,14]
+```
+
+## Creació del model del arbre de decissió
+
+Per a crear el model de l'arbre de decisió anem a fer servir la llibreria C50. Aquesta llibreria implementa funcions per a generar arbres amb l'algoritme C5.0 alhora basat en l'algoritme ID3 de Quinlan. Com a millores, permet treballar amb variables categòriques i discretes i realitza la poda de forma automàtica.
+
+El mètode ID3 tracta de trobar una partició que asseguri la màxima capacitat predictiva i la màxima homogeneïtat de les classes. Volem pocs atributs per a predir el màxim possible. Per a fer-ho, a l'escollir un atribut, calcula el guany obtingut, i el càlcul el fa amb la diferència de la informació d'una partició respecte al desordre (o entropia) que es genera a partir d'aquella elecció. 
+
+La millora en la poda la realitza calculant la taxa d'error de les prediccions de les fulles. Es realitza una estimació pessimista de la predicció (amb calcul de la distribucuó binomial), i si els nodes fills tenen una estimació pitjor que la dels pares s'eliminen. És postpoda, és a dir, es realitza la poda després de contruir l'arbre.
+
+L'executem de forma que ens generi regles per a fer prediccions.
+
+```{r}
+model <- C50::C5.0(train.x, train.y, rules=TRUE, trials = 1)
+summary(model)
+```
+
+Anem a veure els resultats:
+
+* S'han llegit 195 casos amb 14 atributs
+* Classe per defecte -> 'yes' (presenta malaltia coronària)
+* S'han generat 6 regles de classificació
+* Ha fet servir els atributs: ca, exang, cp, thalach, thal
+* L'atribut amb més pes i que és l'arrel de l'arbre es ca, però no està en totes les regles.
+* L'arbre ha classificat malament amb sis regles, 23 elements de 195: 
+    - 11.8% d'errors
+    - 15 'yes' que eren 'no'   
+    - 8 'no' que eren 'yes'
+    - tots els lift, aleatorietat de la predicció estan per sobre d'1, per tant les regles són prou vàlides.
+
+
+## Regles de decisió generades:
+
+L'arbre ha generat 6 regles de decisió amb un lift per sobre d'1.5 en totes:
+
+* Regla 1: cp = asymptomatic i ca in {1, 2, 3} => no presenta malaltia amb un 92.7% de validesa
+* Regla 2: thal in {fixed, reversable} i ca in {1, 2, 3} => no presenta malaltia amb un 90.0% de validesa
+* Regla 3: thalach <= 151 i exang = yes => no presenta malaltia amb un 85.4% de validesa
+* Regla 4: exang = no i ca = 0 => si presenta malaltia amb un 88.5% de validesa
+* Regla 5: thalach > 151 i ca = 0 => si presenta malaltia amb un 87.8% de validesa
+* Regla 6: cp in {atypical, non-anginal, típic} i thal = normal => si presenta malaltia amb un 87.5% de validesa 
+
+
+## Visualització de l'arbre de decissió
+
+A continuació anem a mostrar l’arbre obtingut a partir del model generat:
+
+```{r}
+model <- C50::C5.0(train.x, train.y, trials=1)
+plot(model)
+```
+
+En l'arbre podem veure que el primer nivell es realitza amb l'atribut ca, per això apareix a força de les regles. L'atribut 'ca' és el que aporta particions més homogènies. 
+
+Les fulles 3,5,6,8 han estat podades. La funció C5.0 incorpora també la poda. S'han eliminat aquestes fulles per reduir la complexitat de les regles sense afectar a la predicció. 
+
+
+
+```{r}
+plot(model, subtree = 2)
+```
+
+En aquest primer subarbre, veiem el 2n nivell que s'ha realitzat amb l'atribut exang. En el cas que exang = no, ja tenim una fulla lo suficientment homogenea per a ser final. Si exang = yes, es fa una 3era partició amb l'atribut thalach i ens resulten dues fulles més finals.
+
+En aquest subarbre s'ha podat segurament la fulla 3. 
+
+
+```{r}
+plot(model, subtree = 7)
+```
+
+En aquest segon subarbre, veiem que el 2n nivell que s'ha realitzat amb l'atribut cp. En el cas cp = asimptomàtic, ja tenim una fulla el suficientment homogènia per a ser final. Sinó, es fa una 3a partició amb l'atribut thal i ens resulten dues fulles més finals.
+
+
+Podem concloure que:
+
+1. Si hi ha visibilitat en algun dels vasos (ca in {1, 2, 3}), i a més, no hi ha dolor al pit o té alteració thalasemica a la sang, no presenta malaltia cardíaca (Regla 1 i Regla 2).
+2. La freqüència cardíaca assolida ens serveix de llindar. Si està per sobre de 151 ppm i no té cap vas sanguini visible presenta malaltia segurament i si està per sota de 152 i l'angina és produïda per l'exercici segurament no té cap malaltia cardíaca (Regla 3 i Regla 5)
+3. També en serveix com a partició l'atribut cp.  Ja hem vist la regla 1 on si el dolor al pit és asimptomàtic i es veuen els vasos podem intuir que no presenta malaltia. Alhora, si el dolor no és asimptomàtic (cp in {atypical, non-anginal, típic) i no té alteració thalassemica té força números d'estar malalt del cor. (Regla 1 i Regla 6).
+4. L'atribut ca és força important. En la Regla 4 també participa. En aquest cas, si no es veu cap vas sanguini principal i l'angina no és induïda per l'exercici, llavors si tenim una possible malaltia cardíaca.
+
+## Validació de la qualitat del model
+
+Ara validarem el model presentant-li les dades que ens havíem reservat al dividir el dataset.
+
+```{r}
+predicted.model <- predict(model, test.x, type="class")
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+```
+
+Hem encertat en una mica menys del 80% dels casos observats. Em sembla una molt bona predicció.
+
+Anem a veure la matriu de confusió on veiem encerts i errades per a casa classe:
+
+```{r}
+matrix.conf <- table(Class=test.y,Predicted=predicted.model)
+matrix.conf
+mosaicplot(matrix.conf)
+```
+
+Veiem la comparació entre l'original (Class - eix X) i la predicció (Predicted - eix Y). La predicció d'encerts del yes és millor que la del no.
+
+
+Fent servir la matriu de confusió veiem la qualitat del model també:
+
+```{r}
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("El %% de registres correctament classificats és: %.2f %%",percent.correct))
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+
+```
+
+
+******
+# Altres arbres o mètodes classificatoris
+******
+Anem a fer servir altres tipus d'arbres o mètodes classificatoris, a veure quins valors en trèiem i podem millorar la predicció:
+
+## ID3 - Amb argument trial (Boosting)
+
+Una altra opció que es pot fer servir en la funció C5.0, és l’argument 'trial', que permet un procediment de boosting. Aquest mètode és un model similar a AdaBoost (Adaptative Boosting) i realitza un aprenentatge adaptatiu en cada una de les iteracions que realitza per a millorar la sortida i la qualitat. 
+
+```{r message= FALSE, warning=FALSE}
+# carreguem les dades emmagatzemades per a tenir la mateixa mostra de test i train
+random.data <- read.csv('random-data.csv', sep = ',')
+random.data <- unlist(random.data, use.names=FALSE)
+
+# separem el 66% de conjunt d'entrenament del 34% per a avaluar
+data.train <- heart.data[random.data,]
+data.test <- heart.data[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- data.train[,1:13]
+train.y <- data.train[,14]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- data.test[,1:13]
+test.y <- data.test[,14]
+
+model <- C50::C5.0(train.x, train.y, rules=TRUE, trials = 15)
+summary(model)
+
+```
+
+
+```{r message= FALSE, warning=FALSE}
+
+predicted.model <- predict(model, test.x, type="class", trials = 15)
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+
+matrix.conf <- table(Class=test.y,Predicted=predicted.model)
+matrix.conf
+mosaicplot(matrix.conf)
+
+model <-C50::C5.0(train.x, train.y, trials = 15)
+plot(model)
+
+```
+
+Hem realitzat 14 iteracions per a millorar la qualitat de la predicció  Amb aquest tipus de variació, hem obtingut un guany respecte a la predicció del model original arribant fins al 83.17 %. 
+
+## CART (Classification and Regression Trees)
+
+A diferència del ID3, aquest tipus d'arbre:
+
+* Mesura d’homogeneïtat i criteri d’aturada en el procés de partició i divisió de l’arbre a partir de l'índex de Gini, encara que hi ha variants que n’escullen d’altres. Aquesta mesura estableix el millor separador com el que redueix la diversitat de les diferents particions obtingudes (subarbres).
+
+* La poda es realitza de la següent forma:
+
+    - 1. Generar diversos subarbres podats “interessants”.
+    - 2. Obtenir estimacions de l’error de cadascun d’aquests subarbres.
+    - 3. Escollir el subarbre que presenti la millor estimació.
+    
+* Són binaris; a cada node hi ha un punt de tall (per un procediment semblant al que s’ha explicat per a trobar punts de tall en la discretització d’atributs continus) que separa en dos el conjunt d’observacions.
+* L’algorisme CART pot treballar amb atributs continus (tot i que les modificacions de ID3 també ho poden fer com hem pogut veure en l'exemple anterior C4.5).
+* Pot fer tant classificació com regressió: en el primer cas, la variable per a predir ha de ser categòrica amb un valor per a cada classe possible.
+
+### Matriu de correlació
+
+Primer traiem la matriu de correlació per veure quins atributs tenen impacte amb la variable de sortida target.
+
+* Veiem com a correlació positiva: thalach, cp, slope
+* Veiem com a correlació negativa: age, exang, oldpeak, ca, thal 
+
+
+```{r}
+heart.data.tmp <- heart.data
+for (colname in colnames(heart.data.tmp)) {
+  heart.data.tmp[colname] <- lapply(heart.data.tmp[colname],as.integer)
+}
+corr.mat <- cor(heart.data.tmp)
+# visualize it
+library(corrplot)
+corrplot(corr.mat)
+```
+
+### Generem l'arbre amb aquestes variables
+```{r}
+heart.tree <- rpart(target ~ thalach + cp + slope  + exang + oldpeak + ca + thal,method="class", data=data.train)
+summary(heart.tree)
+```
+
+### Mostrem l'arbre i validem la qualitat
+```{r} 
+fancyRpartPlot(heart.tree, caption = NULL)
+predicted.model <- predict(heart.tree, newdata = test.x, type = "class")
+matrix.conf <- table(Class=test.y,Predicted=predicted.model)
+matrix.conf
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+
+```
+
+* Ha generat 21 nodes però al realitzar la poda ens han quedat molts menys.
+* Hem obtingut un model d'una precissió de 79.21%. 
+* Al igual que amb ID3 (C5.0) la fulla arrel és ca i fa una discriminació igual (ca=1,2,3 yes or no)
+
+### Fem el mateix però amb totes les variables
+```{r}
+heart.tree <- rpart(target ~ .,method="class", data=data.train)
+fancyRpartPlot(heart.tree, caption = NULL)
+predicted.model <- predict(heart.tree, newdata = test.x, type = "class")
+matrix.conf <- table(Class=test.y,Predicted=predicted.model)
+matrix.conf
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+```
+
+Hem perdut precissió. No necessitem totes les variables per a obtenir la millor precissió. Afegeix la variable age i fa perdre qualitat al model resultant.
+
+## k-Nearest Neighbors
+Per finalitzar farem servir un altre mètode per classificar basat en la teoria que vam veure a clustering.
+El que fem és trobar valors veïns similars a partir de les distàncies dels diferents atributs, és a dir, troba similaritat de posició amb N dimensions. Hem de definir un valor de K. Aquest valor indica el nombre de veïns per a definir un nou grup o en aquest cas predir el resultat.
+
+* Farem servir la funció de RStudio (knn).
+* També normalitzarem els atributs per calcular les distancies.
+* Hem de passar els valors categòrics a numèrics i normalitzarem tots els valors
+
+```{r}
+## creem la funció per normalitzar
+ni <-function (x) {(x -min (x)) / (max (x) -min (x))} 
+
+# passem a numèric i normalitzem tant test(x,y) com train(x,y)
+train.x.norm <- train.x
+train.x.norm <- lapply(train.x.norm[1:13],as.integer)
+train.x.norm <- as.data.frame(lapply(train.x.norm[1:13],ni))
+
+train.y.norm <- train.y
+train.y.norm <- as.numeric(train.y.norm)
+train.y.norm[train.y.norm == 1] <- 0
+train.y.norm[train.y.norm == 2] <- 1
+
+test.x.norm <- test.x
+test.x.norm[1:13] <- lapply(test.x.norm[1:13],as.integer)
+test.x.norm[1:13] <- as.data.frame(lapply(test.x.norm[1:13],ni))
+
+test.y.norm <- test.y
+test.y.norm <- as.numeric(test.y.norm)
+test.y.norm[test.y.norm == 1] <- 0
+test.y.norm[test.y.norm == 2] <- 1
+
+prediction <- knn(train.x.norm,test.x.norm,cl=train.y.norm,k=6)
+ 
+## creem la matriu per avaluar la prova
+matrix.conf <- table(Class=prediction,Predicted=test.y)
+mosaicplot(matrix.conf)
+
+matrix.conf <- table(Class=test.y,Predicted=prediction)
+matrix.conf
+
+cat(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(prediction == test.y.norm) / length(prediction)))
+
+```
+
+
+******
+# Conclusions finals
+******
+
+* Al analitzar els diferents atributs i veure com afecten en la variable de hem detectat com a rellevants: cp, restecg, exang, slope, ca, thal, thalach i oldpeak.
+* Al crear un mapa de calor per veures quines variables tenen més incidència en la sortida hem pogut confirmar una mica més la idea que teniem: sex, cp, thalach, exang, oldpeak, slope, ca, thal eran les que veiem que tenien una relació més directe. 
+* Les classificacions generades ordenades de millor a pitjor a  partir del % d'encert en la predicció:
+    - Knn: 
+      - % d'encert en la predicció: 85.15%:
+      - Amb una k = 6, es a dir, amb 6 elements de la mostra per predir.
+    - C5.0 (ID3) amb boosting: 
+        - % d'encert en la predicció: 83.17% 
+        - Atributs en els els nodes resultants: ca, exang, cp, thalach, thal
+    - CART: 
+        - % d'encert en la predicció: 79.21%
+        - Atributs emprats: thalach + cp + slope  + exang + oldpeak + ca + thal
+        - Atributs en els els nodes resultants: ca, cp, exang, thalach, age
+    - C5.0 (ID3) sense boosting: 
+        - 78.22% 
+        - Atributs en els els nodes resultants: ca, exang, cp, thalach, thal
+    - CART: 
+        - % d'encert en la predicció: 75.25%
+        - Atributs emprats: tots
+        - Atributs en els els nodes resultants: ca, cp, exang, thalach, age)   

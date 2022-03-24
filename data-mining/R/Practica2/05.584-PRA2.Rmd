@@ -1,0 +1,103 @@
+---
+title: 'Mineria de dades: PRA2 - Modelat d''un joc de dades'
+author: "Autor: Nom estudiant"
+date: "Novembre 2019"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PRA2-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+******
+# Introducció
+******
+## Presentació
+Aquesta pràctica cobreix de forma transversal la assignatura.
+
+Les Pràctiques 1 i 2 de la assignatura es plantegen d'una forma conjunta de manera que la Pràctica 2 serà continuació de la 1.
+
+L'objectiu global de les dues pràctiques consisteix en seleccionar un o diversos jocs de dades, realitzar les tasques de preparació i anàlisi exploratòria amb l'objectiu de disposar de dades llestos per aplicar algoritmes de clustering, associació i classificació.
+
+## Competències
+Les competències que es treballen en aquesta prova són:
+
+* Ús i aplicació de les TIC en l'àmbit acadèmic i professional.  
+* Capacitat per innovar i generar noves idees.  
+* Capacitat per avaluar solucions tecnològiques i elaborar propostes de projectes tenint en compte els recursos, les alternatives disponibles i les condicions de mercat.  
+* Conèixer les tecnologies de comunicacions actuals i emergents així com saber-les aplicar convenientment per dissenyar i desenvolupar solucions basades en sistemes i tecnologies de la informació.  
+* Aplicació de les tècniques específiques d'enginyeria de programari en les diferents etapes del cicle de vida d'un projecte.  
+* Capacitat per aplicar les tècniques específiques de tractament, emmagatzematge i administració de dades.  
+* Capacitat per proposar i avaluar diferents alternatives tecnològiques per a resoldre un problema concret.  
+
+## Objectius
+La correcta assimilació de tots els aspectes treballats durant el semestre.  
+En aquesta pràctica abordem un cas real de mineria de dades on hem de posar en joc tots els conceptes treballats.  
+Cal treballar tot el cicle de vida d'el projecte. Des del objectiu del projecte fins a la implementació del coneixement trobat passant per la preparació, neteja de les dades, coneixement de les dades, generació del model, interpretació i avaluació.  
+
+## Descripció de la PAC a realitzar
+
+## Recursos Bàsics
+Material docent proporcionat per la UOC. 
+
+## Criteris de valoració
+
+**Exercicis pràctics** 
+
+Per a totes les PAC cal documentar en cada apartat de l'exercici pràctic que s'ha fet i com s'ha fet.  
+
+## Format i data de lliurament
+El format de lliurament és: usernameestudiant-PECn.html / doc / docx / odt / pdf  
+Data de lliurament: 15.01.2020   
+S'ha de lliurar la PAC a la bústia de lliuraments de l'aula  
+
+## Nota: Propietat intel·lectual 
+
+> Sovint és inevitable, al produir una obra multimèdia, fer ús de recursos creats per terceres persones. És per tant comprensible fer-ho en el marc d'una pràctica dels estudis d'Informàtica, Multimèdia i Telecomunicació de la UOC, sempre que això es documenti clarament i no suposi plagi en la pràctica.  
+
+> Per tant, al presentar una pràctica que faci ús de recursos aliens, s'ha de presentar juntament amb ella un document en què es detallin tots ells, especificant el nom de cada recurs, el seu autor, el lloc on es va obtenir i el seu estatus legal: si l'obra està protegida pel copyright o s'acull a alguna altra llicència d'ús (Creative Commons, llicència GNU, GPL ...).
+L'estudiant haurà de assegurar-se que la llicència no impedeix específicament el seu ús en el marc de la pràctica. En cas de no trobar la informació corresponent haurà d'assumir que l'obra està protegida per copyright.  
+
+> Haureu, a més, adjuntar els fitxers originals quan les obres utilitzades siguin digitals, i el seu codi font si correspon.  
+
+******
+# Enunciat
+******
+Com a continuació de l'estudi iniciat en la pràctica 1, procedim a aquesta pràctica 2 a aplicar models analítics sobe el joc de dades seleccionat i preparat en la pràctica anterior.  
+
+D'aquesta manera es demana a l'estudiant que completi els següents passos:  
+
+1. Aplicar un model de generació de regles a partir de **arbres de decisió**.  
+
+2. Aplicar un model **no supervisat** i basat en el concepte de **distància**, sobre el joc de dades.  
+
+3. Aplica de nou el model anterior, però utilitzant una **mètrica diferent** i compara els resultats.  
+
+4. Aplicar un **model supervisat** sobre el joc de dades **sense** haver aplicat prèviament **PCA/SVD**.  
+
+5. Aplicar un **model supervisat** sobre el joc de dades havent aplicat prèviament **PCA/SVD**.  
+
+6. Hi ha hagut millora en capacitat predictiva, després d'aplicar PCA/SVD? A què creus que és degut ?.  
+ 
+
+******
+# Rúbrica
+******
+* 15%. Es generen regles i es comenten i interpreten les més significatives. A més es genera matriu de confusió per mesurar la capacitat predictiva de l'algoritme.  
+* 15%. Es genera model no supervisat, es mostren i comenten mesures de qualitat del model generat i es comenten les conclusions aix? com la descripci? dels grups resultants.  
+* 20%. Es genera model no supervisat amb mètrica de distància diferent a l'anterior. Es mostren i comenten mesures de qualitat del model generat i es comenten les conclusions. A més es comparen els dos models no supervisats amb mètriques de distància diferent aix? com la descripci? dels grups resultants.  
+* 15%. Es genera un model supervisat sense PCA/SVD previ, es mostren i comenten mesures de qualitat del model generat i es comenta extensament el coneixement extret del model.  
+* 15%. Es genera un model supervisat amb PCA/SVD previ, es mostren i comenten mesures de qualitat del model generat i es comenta extensament el coneixement extret del model. Es valorar? l'extracci? de coneixement del model generat.  
+* 20%. Es compara la capacitat predictiva dels dos models supervisats i es comenta la diferència de rendiment en base a l'efecte PCA/SVD.  
+

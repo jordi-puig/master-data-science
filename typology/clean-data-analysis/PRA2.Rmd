@@ -1,0 +1,783 @@
+---
+title: 'Tipologia i cicle de vida de les dades: PRA2 - Neteja i anàlisi de les dades'
+author: "Autor: Jordi Puig Ovejero"
+date: "Desembre 2020"
+output:
+  word_document: default
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+    latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+Carrega de les llibreries que es necessiten
+```{r message= FALSE, warning=FALSE}
+library(ggpubr)
+library(ggplot2)
+library(arules)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+library(nortest)
+library(plyr)
+library(randomForest)
+library(caret)
+library(VIM)
+library(DescTools)
+```
+
+******
+# Descripció del dataset. Perquè és important i quina pregunta/problema pretén respondre?
+******
+
+Per a realitzar un estudi he triat un dataset de [marqueting bancari](https://archive.ics.uci.edu/ml/datasets/Bank+Marketing).
+
+Les dades estan relacionades amb campanyes de màrqueting directe d’una institució bancària portuguesa. Aquestes campanyes, basades en trucades de telèfon, buscaven clients que contractessin un dipòsit a termini. Sovint, es requeria més d’una trucada amb el mateix client per a concretar la transacció.
+
+Aquest dataset permet respondre a la pregunta per predir si un client subscriurà ("yes"/"no") un dipòsit a termini a partir d'una sèrie de dades del client (age, job, marital, education...). Si tenim una bona segmentació dels clients i fem una bona predicció el banc pot fer campanyes molt dirigides a obtenir resultats positius.
+
+Apart d'aquesta pregunta predictiva, també volem saber si hi ha alguna relació entre la quantitat de diners que els usuaris tenen al banc amb altre informació emmagatzemada (estudis, estat civil, ...).
+
+Durant l'exercici direm que un usuari ha convertit, és a dir, tenim una conversió, si y = 'yes'. En cas contrari, direm que no ha convertit. El concepte **conversió** sortirà durant tot l'exercici.
+
+
+El fitxer on es troba el data set és, **bank-full.csv**:
+
+* Nombre d'instancies: 45211
+* Nombre d'instancies: 16 + atribut de sortida (total 17)
+
+
+## Definició dels atributs
+
+**Dades del client:**
+
+* 1 - age (numeric)
+* 2 - job : tipus de feina (categorical):
+    * 'admin.'
+    * 'unknown'
+    * 'unemployed'
+    * 'management'
+    * 'housemaid'
+    * 'entrepreneur'
+    * 'student'
+    * 'blue-collar'
+    * 'self-employed'
+    * 'retired'
+    * 'technician'
+    * 'services'
+* 3 - marital : estat civil (categorical): 
+    * 'divorced': significa divorciat o vidu
+    * 'married'
+    * 'single'
+* 4 - education (categorical): 
+    * 'primary'
+    * 'seconday'
+    * 'tertiary'
+    * 'unknown'
+* 5 - default: té crèdit per defecte? (categorical: 'no','yes')
+* 6 - balance: mitja de saldo anual, en euros (numeric) 
+* 7 - housing: té préstec d'habitatge? (categorical: 'no','yes')
+* 8 - loan: té préstec personal? (categorical: 'no','yes')
+
+**Atributs relacionats amb el darrer contacte de la campanya actual:**
+
+* 9 - contact: com ha estat la comunicació (categorical: 'cellular','telephone','unknown')
+* 10 - month: darrer contacte, mes de l'any (categorical: 'jan', 'feb', 'mar', ..., 'nov', 'dec')
+* 11 - day: darrer contacte, dia del més (numeric)
+* 12 - duration: darrer contacte, en segons (numeric).
+
+**Altres atributs:**
+
+* 13 - campaign: nombre de contactes realitzats durant aquesta campanya i per a aquest client (numeric, inclou el darrer contacte)
+* 14 - pdays: nombre de dies que han passat des de el darrer contacte d'una campanya anterior (numeric; -1 significa que no ha estat contactat previament)
+* 15 - previous: nombre de contactes realitzats abans d'aquesta campanya i per a aquest client (numeric)
+* 16 - poutcome: resultat de la campanya de màrqueting anterior (categorical: 'unknown','other','failure','success')
+
+#### Variable de sortida (objectiu desitjat, ens indica si el registre ha convertit o no)
+
+* 17 - y - El client ha subscrit el dipòsit a termini? (binary: 'yes','no')
+
+******
+# Integració i selecció de les dades d’interès a analitzar.
+******
+Carreguem les dades i fem un summary. Els elements categòrics estan carregats com a *factor* des d'un inici. Per les variables categòriques prefereixo treballar com a factor que com character. Ens facilita les coses per ordenació o per veure les diferents categories que hi ha.
+
+```{r message= FALSE, warning=FALSE}
+bank <- read.csv('bank-full.csv',stringsAsFactors = TRUE, sep = ';')
+attach(bank) # ens permet referenciar les columnes de bank sense haver de especificar el dataset.
+summary(bank)
+```
+
+Amb aquesta informació podem dir que: 
+
+* La mitja d'edat està quasi en els 41 anys i el 3Q en els 48. Per tant intueixo que gran part de la mostra està en una franja d'edat relativament jove.
+* Tenim valors 'unknown' a education però no és molt significatiu.
+* A balance veiem possibles valors atípics (outliers).
+* Tenim molts valors unkwown en el registre contact. Així que segurament no els esborrarem i farem servir com una categoria més o els haurem d'inferir.
+* Al mes de maig és on tenim més mostra.
+* La mitja de la duració de la trucada és d'uns 3 minuts. 1Q = 1.6 minuts aprox. i 3Q = 5.3 minunts. Tenim alguns valors atípics amb una trucada de 82 minuts.
+* campaign: sembla que tenim outliers ja que el 3Q està a 3 i tenim un 63 (63 trucades durant aquesta campanya)
+* previous: el mateix passar amb previous (contactes previs a la campanya).
+* poutcome: té molts valors unknown que no esborrarem per no reduïr tant la mostra i ens serviran com una categoria pròpia segurament.
+
+*****
+# Neteja de les dades.
+*****
+
+## Les dades contenen zeros o elements buits? Com gestionaries aquests casos?
+
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(bank))
+```
+
+No tenim valors nulls però hi ha 'unknown', com hem vist en l'anàlisi exploratori, en alguns atributs categòrics que ara tractarem.
+
+Tenim 3 opcions per aquests valors:
+
+1. Eliminar els registres
+2. Assignar per un valor estimat
+3. No fer res i tractar-los com a una categoria.
+
+Optarem per la solució 3 segons la proporció d'elements de la mostra ja que: 
+
+* Els valors 'unknown' poden representar per si mateix una categoria única.
+* Pot haver-hi una diferència important de dades si eliminem els 'unknown'.
+* Tot el que ha causat el camp 'unknown' pot estar relacionat amb el resultat.
+
+Els transformem a null en una variable temporal i visualitzem gràficament la quantitat.
+
+```{r message= FALSE, warning=FALSE}
+bank.unknown <- bank
+bank.unknown[bank.unknown=="unknown"] <- NA
+colSums(is.na(bank.unknown))
+
+aggr(bank.unknown, numbers=TRUE, sortVars=TRUE, labels=names(bank.unknown), cex.axis=.7, gap=3, ylab=c("Missing data","Pattern"))
+```
+
+
+Veiem on tenim els valors 'unknown' i com sabiem de l'anàlisi exploratori previ, en tenim  molts a poutcome, contact i en menor mesura a education i job.
+
+Eliminem els 'unknown' de job i education perquè la proporció és petita, en canvi, amb contact i poutcome podríem fer una assignació estimada o deixar-los com a categoria pròpia, ja que tenim quasi un 30% en contact i més d'un 80% en poutcome.
+
+Eliminem els de education i job i deixem els de contact i poutcome com a categoria pròpia.
+
+```{r message= FALSE, warning=FALSE}
+# eliminem els unknown de job i de education
+total.rows <- nrow(bank);
+bank.clean <-subset(bank, education != "unknown")
+bank.clean <- subset(bank.clean, job != "unknown")
+
+# eliminem categories buides
+bank.clean <- droplevels(bank.clean)
+
+rows <- nrow(bank.clean);
+(rows / total.rows) * 100
+```
+Eliminant els 'unknown' de education i job encara tenim  més del 95.5% de la mostra. 
+
+## Identificació i tractament de valors extrems. (outliers)
+
+Ara anem a veure els valors atípics. Per a trobar valors extrems anem a aplicar la idea dels IQR (interquartile ranges):
+
+* [referència1:](http://www.mathwords.com/o/outlier.htm)
+
+* [referència2:](http://r-statistics.co/Outlier-Treatment-With-R.html)
+
+Per a una determinada variable contínua, els outliers són aquelles observacions que es troben fora de 1.5 * IQR, on IQR, el "Inter Quartile Range" és la diferència entre el Q3 i el Q1:
+
+
+* Interquartile range, IQR = Q3 - Q1
+* lower = Q1 - 1.5 * IQR 
+* Upper = Q3 + 1.5 * IQR
+
+### Funció per treure els límits dels valors atípics
+```{r message= FALSE, warning=FALSE}
+outliersLimits <- function(x) {
+    limits <- c("above", "under")
+    limits$above <- quantile(x, 0.75, type=6) + 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+    limits$under <- quantile(x, 0.25, type=6) - 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+  return(limits)
+}
+```
+
+### Valors atípics a age
+```{r message= FALSE, warning=FALSE}
+ggplot(data = bank.clean ,aes(x=y,y=age))+geom_boxplot()
+
+# podem veure els límits de age
+limits <- outliersLimits(bank.clean$age)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+bank.clean <-subset(bank.clean, age >= limits$under)
+bank.clean <-subset(bank.clean, age <= limits$above)
+
+ggplot(data = bank.clean,aes(x=y,y=age))+geom_boxplot()
+
+total.rows <- nrow(bank.clean);
+rows <- nrow(bank.clean)
+(rows / total.rows) * 100
+```
+
+Amb graf boxplot podem preveure els valors atípics abans de ser tractats i posteriorment, on és veu la mostra molt més compactada.
+
+
+### Valors atípics a balance
+```{r message= FALSE, warning=FALSE}
+ggplot(data = bank.clean ,aes(x=y,y=balance))+geom_boxplot()
+
+total.rows <- nrow(bank.clean);
+
+# podem veure els límits de balance
+limits <- outliersLimits(bank.clean$balance)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+bank.clean <-subset(bank.clean, balance >= limits$under)
+bank.clean <-subset(bank.clean, balance <= limits$above)
+
+ggplot(data = bank.clean,aes(x=y,y=balance))+geom_boxplot()
+
+rows <- nrow(bank.clean)
+(rows / total.rows) * 100
+```
+
+Les mostres queden molt més compactades eliminant aquests valors extrems.
+
+```{r message= FALSE, warning=FALSE}
+total.rows <- nrow(bank);
+rows <- nrow(bank.clean);
+(rows / total.rows) * 100
+```
+
+Finalment hem calculat quin percentatge de la mostra hem eliminat amb els valors atípics i el 'unkwown' i ens ha quedat un 84.61% del total.
+
+Treballarem el model bank.clean on hem tret alguns unknown i valors atípics.
+
+## Reducció de la dimensionalitat 
+
+Segurament amb una mostra menor d'atributs podem tenir un model similar però reduint les dimensions. Detectem i eliminem aquells atributs poc rellevants o redundant. Agafem els components que aportin més variança al total. 
+
+### Dades quantitatives. Principal Component Analysis (PCA)
+
+La funció prcom treballa amb dades quantitatives, per tant agafem només aquells atributs que són numèrics.
+
+```{r message= FALSE, warning=FALSE}
+bank.pca <- prcomp(bank.clean[,c(1,6,10,12:15)], center = TRUE, scale = TRUE)
+summary(bank.pca)
+```
+El resultat no ens ajuda gaire ja que amb PC5 només tenim un 80% de la variança i si treiem un component en tenim un 92%.
+
+No treurem doncs cap dels atributs.
+
+## Exportació de dades netejades
+Un cop hem netejat les dades les anem a emmagatzemar físicament en un arxiu csv.
+```{r message= FALSE, warning=FALSE}
+write.csv(bank.clean, "bank_clean.csv")
+```
+
+
+******
+# Anàlisi de les dades.
+******
+
+## Selecció dels grups de dades que es volen analitzar/comparar (planificació dels anàlisis a aplicar)
+
+Anem a seleccionar els grups del nostre conjunt de dades per a realitzar anàlisi i realitzar les comparatives.
+
+
+### Agrupació per estudis (education)
+```{r message= FALSE, warning=FALSE}
+bank.education.primary <- bank.clean[bank.clean$education == "primary",]
+bank.education.secondary <- bank.clean[bank.clean$education == "secondary",]
+bank.education.tertiary <- bank.clean[bank.clean$education == "tertiary",]
+```
+
+### Agrupació per estat civil (marital)
+```{r message= FALSE, warning=FALSE}
+bank.marital.divorced <- bank.clean[bank.clean$marital == "divorced",]
+bank.marital.married <- bank.clean[bank.clean$marital == "married",]
+bank.marital.single <- bank.clean[bank.clean$marital == "single",]
+```
+
+### Agrupació per si te prestec d'habitatge (housing)
+```{r message= FALSE, warning=FALSE}
+bank.housing.yes <- bank.clean[bank.clean$housing == "yes",]
+bank.housing.no <- bank.clean[bank.clean$housing == "no",]
+```
+
+### Agrupació per si té un crèdit per defecte (default)
+```{r message= FALSE, warning=FALSE}
+bank.default.yes <- bank.clean[bank.clean$default == "yes",]
+bank.default.no <- bank.clean[bank.clean$default == "no",]
+```
+
+Després veurem si fem servir totes les variables que hem generat.
+
+## Comprovació de la normalitat i homogeneïtat de la variància.
+
+### Normalitat
+
+Per a comprovar que les dades del dataset **(les numèriques)** provenen d'una mostra distribuida amb normalitat farem servir la prova de normalitat d'Anderson-Darling i Shapiro-Wilk. 
+
+Per un conjunt de dades d'una mostra, avaluem si provenen d'un distribució específica (el nostre cas distribució normal). El que farem és que per cada un dels atributs de la mostra fer el test per si el p-valor és superior al valor prefixat de α = 0,05. Si es cumpleix, podem dir que tenim una distribució normal.
+
+Test de Anderson-Darling:
+
+```{r message= FALSE, warning=FALSE}
+alpha = 0.05
+col.names = colnames(bank.clean)
+
+for (i in 1:ncol(bank.clean)) {
+  if (is.integer(bank.clean[,i]) | is.numeric(bank.clean[,i])) {
+    p_val = ad.test(bank.clean[,i])$p.value
+    if (p_val < alpha) {
+      cat("La variable", col.names[i],"NO segueix una distribució normal.\n")                    
+    } else {
+      cat("La variable", col.names[i],"SI segueix una distribució normal.\n")
+    }
+  }
+}
+```
+Cap de les variables estudiades sembla seguir una distribució normal. 
+
+Provarem com hem comentat també el test de Shapiro-Wilk estudiat als apunts. Es considera un dels més potents per a estudiar la normalitat. La dinàmica es similar, assumint com a hipòtesi nul·la que la mostra està distribuïda normalment, si el p-valor és menor que α = 0,05, es rebutja la hipòtesi i es conclou que les dades no provenen d'una distribució normal.
+
+Aquest test només treballa amb menys de 5000 elements per tant agafarem una mostra aleatòria d'aquesta magnitud (10%) . La nostre mostra inicial és molt més gran.
+
+```{r message= FALSE, warning=FALSE}
+
+random.data <- sample(1:nrow(bank.clean), 0.10 * nrow(bank.clean))
+data.test <- bank.clean[random.data,]
+
+alpha = 0.05
+col.names = colnames(bank.clean)
+
+for (i in 1:ncol(data.test)) {
+  if (is.integer(data.test[,i]) | is.numeric(data.test[,i])) {
+    p_val = shapiro.test(data.test[,i])
+    if (p_val$p.value < alpha) {
+      cat("La variable", col.names[i],"NO segueix una distribució normal.\n")                    
+    } else {
+      cat("La variable", col.names[i],"SI segueix una distribució normal.\n")                    
+    }
+  }
+}
+```
+
+Amb els dos test concluim que els valors de les mostres no provenen d'una mostra amb una distribució normal.
+
+### Homogeneïtat de la variància
+Ara comprovarem l’homoscedasticitat o igualtat entre les variàncies dels grups que comparem. Anem a aplicar el test de Fligner-Killeen que es fa servir quan les dades no segueixen la condició de normalitat, com es el nostre cas. La hipòtesi nul·la assumeix igualtat de variàncies en els grups de dades. Així p-valors inferiors a 0,05 indicaran que variàncies diferents (heteroscedasticitat).
+
+Farem la prova amb els clients que tenen estat civil 'divorced', 'married' o single respecte al saldo en el banc.
+
+```{r message= FALSE, warning=FALSE}
+fligner.test(balance ~ marital, data = bank.clean)
+```
+El p-valor és inferior a 0,05. Per tant, concluim que les variàncies son heterogènies.
+
+Fem el mateix, perà ara amb el nivell d'estudis i el saldo al banc.
+
+```{r message= FALSE, warning=FALSE}
+fligner.test(balance ~ education, data = bank.clean)
+```
+Ens passa el mateix.
+
+Finalment, fem aquesta mateixa prova amb la variable balance i la variable de sortida 'y' (contracte o no un prèstec).
+
+```{r message= FALSE, warning=FALSE}
+fligner.test(balance ~ y, data = bank.clean)
+```
+
+## Aplicació de proves estadístiques per comparar els grups de dades. En funció de les dades i de l’objectiu de l’estudi, aplicar proves de contrast d’hipòtesis, correlacions, regressions, etc. Aplicar almenys tres mètodes d’anàlisi diferents.
+
+### Quines variables influeixen més en la quantitat de diners al banc? (Correlació)
+
+Amb la correlació volem mesurar l'impacte que té una variable sobre una altre. El coeficient pot prendre els valors entre 1 i -1, on els extrems indiquen una relació perfecta i el 0 indica que no tenim relació. Els signe negatiu ens indica el valor elevat d'una están relacionats amb valors petits dels altres i el signe positiu que van de la mà en quant a valors grans o petits.
+
+Realitzem un anàlisi per determinar quines variables tenen més impacte sobre la quantitat de diners que els clients tenen al banc. Com que les dades que tenim no segueixen una distribució normal farem servir el coeficient de correlació de **Spearman**. 
+
+
+```{r message= FALSE, warning=FALSE}
+
+# passem totes les variables a numèriques
+bank.clean.tmp <- bank.clean
+for (colname in colnames(bank.clean.tmp)) {
+  bank.clean.tmp[colname] <- lapply(bank.clean.tmp[colname],as.integer)
+}
+
+# creem una matriu amb dos columnes (estimate, p-value)
+corr_matrix <- matrix(nc = 2, nr = 0)
+colnames(corr_matrix) <- c("estimate", "p-value")
+
+# calculem el coeficient de correlació per a cada variable quantitativa respecte al camp "balance"
+for (i in 1:(ncol(bank.clean.tmp) - 1)) {
+  if (is.integer(bank.clean.tmp[,i]) | is.numeric(bank.clean.tmp[,i])) {
+    spearman_test = cor.test(as.numeric(bank.clean.tmp[,"balance"]) ,bank.clean.tmp[,i] , method = "spearman")
+    corr_coef = spearman_test$estimate
+    p_val = spearman_test$p.value
+
+    # afegim el parell de valors (estimate i p.value) a la matriu
+    pair = matrix(ncol = 2, nrow = 1)
+    pair[1][1] = corr_coef
+    pair[2][1] = p_val
+    corr_matrix <- rbind(corr_matrix, pair)
+    rownames(corr_matrix)[nrow(corr_matrix)] <- colnames(bank.clean.tmp)[i]
+  }
+}
+
+print(corr_matrix)
+```
+Segons els valors més propers a 1 o -1 podem determinar quines tenen més relació. Les que tenen més relació amb els diners al banc són loan(té prestec personal) i sobretot default(té un crèdit).
+
+
+### Quines variables influeixen més si contractaran un dipòsit a termino o no? (Correlació)
+
+Anem a realitzar un estudi similar però ara amb la variable de sortida 'y', que ens diu si es va a contractar un dipòsit a termini.
+
+
+```{r message= FALSE, warning=FALSE}
+
+# passem totes les variables a numèriques
+bank.clean.tmp <- bank.clean
+for (colname in colnames(bank.clean.tmp)) {
+  bank.clean.tmp[colname] <- lapply(bank.clean.tmp[colname],as.integer)
+}
+
+# creem una matriu amb dos columnes (estimate, p-value)
+corr_matrix <- matrix(nc = 2, nr = 0)
+colnames(corr_matrix) <- c("estimate", "p-value")
+
+# calculem el coeficient de correlació per a cada variable quantitativa respecte al camp "balance"
+for (i in 1:(ncol(bank.clean.tmp) - 1)) {
+  if (is.integer(bank.clean.tmp[,i]) | is.numeric(bank.clean.tmp[,i])) {
+    spearman_test = cor.test(as.numeric(bank.clean.tmp[,"y"]) ,bank.clean.tmp[,i] , method = "spearman")
+    corr_coef = spearman_test$estimate
+    p_val = spearman_test$p.value
+
+    # afegim el parell de valors (estimate i p.value) a la matriu
+    pair = matrix(ncol = 2, nrow = 1)
+    pair[1][1] = corr_coef
+    pair[2][1] = p_val
+    corr_matrix <- rbind(corr_matrix, pair)
+    rownames(corr_matrix)[nrow(corr_matrix)] <- colnames(bank.clean.tmp)[i]
+  }
+}
+
+print(corr_matrix)
+```
+
+Comparant l'atribut 'y' amb la resta, veiem una relació amb housing, contact, pdays, previous, poutcome i sobretot **duration**, as a dir, la durada de la trucada.
+
+
+### Matriu de correlació visual (Correlació)
+
+Amb la matriu de correlació veiem la relació de cada atribut amb els altres.
+
+```{r message= FALSE, warning=FALSE}
+bank.clean.tmp <- bank.clean
+for (colname in colnames(bank.clean.tmp)) {
+  bank.clean.tmp[colname] <- lapply(bank.clean.tmp[colname],as.integer)
+}
+corr.mat <- cor(bank.clean.tmp, method = "spearman")
+# visualize it
+library(corrplot)
+col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+corrplot(corr.mat, method="color", col=col(200),   
+         addCoef.col = "black", 
+         tl.col="black", tl.srt=45,
+         insig = "blank", 
+         number.cex=0.5)
+```
+
+Apart de les relacions que hem comentat abans podem veure una força relació significativa entre:
+
+- **marital - age**
+- marital - education
+- education - age
+- housing - age
+
+Hi han altres relacions fortes però que tenen a veure amb atributs de com s'han fet les campanyes de marketing anteriors (entre elles) i no a les dades dels clients.
+
+
+
+
+#### Conversió de 'y' en funció de duration
+
+```{r message= FALSE, warning=FALSE}
+ggplot(data=bank.clean,aes(x=duration,fill=y)) + geom_bar(position="fill") + ylab("Frequency") + scale_x_continuous(limits = c(0, 1000))
+```
+
+L'evidència sembla clara. Com més temps dura la trucada, més possibilitats de que el client contracti un dipòsit a termini.
+
+#### Conversió de 'y' en funció de poutcome
+
+```{r message= FALSE, warning=FALSE}
+ggplot(data=bank.clean, aes(x= poutcome, fill = y)) + geom_bar(position="fill") + ylab("Frequency")
+```
+
+Si en una campanya anterior havíen contractat un dipòsit tenen un percentatge molt més alt de possibilitats de contractar.
+
+#### Conversió de 'y' en funció de previous
+
+```{r message= FALSE, warning=FALSE}
+ggplot(data=bank.clean,aes(x=previous,fill=y)) + geom_bar(position="fill") + ylab("Frequency") + scale_x_continuous(limits = c(0, 10))
+```
+
+Amb el nombre de contactes previs, encara que la correlació ens digui que tenen una relació directe, no seria capaç de trobar un patró de cara a definir el nombre de trucades a realitzar.
+
+#### Conversió de 'y' en funció de pdays
+
+```{r message= FALSE, warning=FALSE}
+pdays.groups <- bank.clean %>% group_by(pdays) %>% dplyr::summarise(n = n())
+ggplot(pdays.groups, aes(x = pdays, y = n)) + geom_bar(fill = "#0073C2FF", stat = "identity")  + theme_pubclean() + scale_x_continuous(limits = c(0, 100))
+
+ggplot(data=bank.clean,aes(x=pdays,fill=y)) + geom_bar(position="fill") + ylab("Frequency") + scale_x_continuous(limits = c(0, 100))
+```
+
+En aquest cas hem tret tant una gràfica numèrica absoluta com normalitzada. Si que sembla que tenim un patró que si fa poc que hem trucat tenim menys possibilitats de contractar. Necessitariem més mostra en les franjes de menys dies per a tenir una certesa.
+
+
+#### Conversió de 'y' en funció de contact
+
+```{r message= FALSE, warning=FALSE}
+ggplot(data=bank.clean, aes(x= contact, fill = y)) + geom_bar(position="fill") + ylab("Frequency")
+```
+
+La proporció del mòbil respecte al telèfon es millor i el pitjor són els unknown.
+
+#### Conversió de 'y' en funció de housing
+
+```{r message= FALSE, warning=FALSE}
+ggplot(data=bank.clean, aes(x= housing, fill = y)) + geom_bar(position="fill") + ylab("Frequency")
+```
+
+Podem concluir que si tenen un prèstec d'habitatge serà més complicat que contractin un crèdit a termini.
+
+### Es tenen més diners al banc si NO es té un crèdit per defecte? (Contrast d'hipòtesi)
+
+Anem a realitzar un altre tipus de prova estadística, el contrast d'hipòtesi. Aquest contrast el farem sobre dues mostres per determinar si el fet de no tenir un crèdit per defecte (default = no) influeix alhora de tenir més diners al banc. Per a fer-ho, tenim una mostra amb els usuaris amb crèdit per defecte i una altre sense.
+
+Comprovam la normalitat de la distribució del camp balance (ja sabiem d'abans que no segueix aquesta distribució). Amb el test Anderson-Darling (mostres grans) tornem a comprovar que no és una distribució normal, ja que p-value < 0.05
+
+```{r}
+ad.test(bank.clean$balance)
+
+hist(bank.clean$balance,
+  main = "balance normality",
+  xlab = "balance"
+)
+
+```
+
+I ara amb Fligner-Killeen rebutjem la homogeneïtat en la variança.
+
+```{r}
+fligner.test(balance ~ default, data = bank.clean)
+```
+
+Com que les dades no segueixen una distribució normal i no tenim una homogeneïtat en les variancies, no aplicarem la t de Student. Fem servir el mètode de Wilcoxon i Mann-Whitney encara que **perdem potència estadísctica**.
+
+Fem el contrast d'hipòtesi de si el subconjunt de dades sense crèdit bancari té un balance diferent amb els que si el tenen.
+
+* H0 : els 2 grups son similars
+* H1 : els 2 grups son diferents
+
+```{r}
+wilcox.test(bank.default.yes$balance, bank.default.no$balance)
+```
+I podem concloure que rebutjem la hipòtesi nul·la amb el valor de p-value < 0.05 de que no hi han diferències significatives entre els balance que tenen un crèdit bancari (default) dels que no. Si que existeixen aquestes diferències.
+
+Altre opció és amb el alternative less, i canviem la hipotesi a 
+
+* H0 : μ1 − μ2 = 0
+* H1 : μ1 − μ2 < 0
+
+on μ1 és la mitja de població que tè un crèdit i μ2 és la mitja que no en té. Fem servir una α = 0, 05.
+
+```{r}
+wilcox.test(bank.default.yes$balance - bank.default.no$balance, alternative = "less")
+```
+Ja que el valor del p-value és < 0.05 podem concloure que tenir un crèdit bancari pot indicar que és tenen menys diners de mitja anual al banc.
+
+Si revisem visualment:
+
+```{r}
+ggplot(bank.clean) +
+  aes(x = default, y = balance) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+```
+
+Comprovem que els balance son totalment superiors si NO tenen crèdit per defecte (default).
+
+### Es tenen més diners al banc si NO es té un prestec d'habitatge? (Contrast d'hipòtesi)
+
+Plantejament similar al exercici anterior on ja sabem que el camp balance no seguiex una distribució normal.
+
+```{r}
+ad.test(bank.clean$balance)
+
+hist(bank.clean$balance,
+  main = "balance normality",
+  xlab = "balance"
+)
+
+```
+
+I ara amb Fligner-Killeen rebutjem la homogeneïtat en la variança amb el camp housing.
+
+```{r}
+fligner.test(balance ~ housing, data = bank.clean)
+```
+
+Altre cop fem servir Wilcoxon test per a fer el contrast d'hipòtesi de si el subconjunt de dades sense hipoteca té un balance diferent amb els que si tenen hipoteca.
+
+* H0 : els 2 grups son similars
+* H1 : els 2 grups son diferents
+
+```{r}
+wilcox.test(bank.housing.yes$balance, bank.housing.no$balance)
+```
+I podem concloure que rebutjem la hipòtesi nul·la amb el valor de p-value < 0.05 de que no hi han diferències significatives entre els balance que tenen hipoteca (housing) i els que no en tenen.
+
+Si revisem visualment:
+
+```{r}
+ggplot(bank.clean) +
+  aes(x = housing, y = balance) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+```
+
+Els balance son relativament superiors si NO té hipoteca, encara que no es tan evident com en l'exemple anterior.
+
+
+### Es tenen més diners al banc si es tenen estudis primary i tertiary? (Contrast d'hipòtesi)
+
+Igual que abans anem a comprovar si els sous son diferents segons els estudis i ja sabem que no compleixen els requeriments per aplicar una t de Student. Anem directament a aplicar Wilcoxon test.
+
+```{r}
+wilcox.test(balance ~ education, data = bank.clean, subset = education %in% c('primary', 'tertiary'))
+```
+Tornem a rebutjar la hipòtesi nul·la i deduim que les mostres tenen balance diferents si tenen estudis diferents.
+
+```{r}
+ggplot(subset(bank.clean, education != "secondary")) +
+  aes(x = education, y = balance) +
+  geom_boxplot(fill = "#0c4c8a") +
+  theme_minimal()
+```
+
+### Predicció mitjançant regressió logística
+
+És un tipus d'anàlisi de regressió que ens permet predir un resultat dicotòmic, a partir de variables independents. El que fa és estimar la probabilitat d'ocurrència d'una de les categories de sortida (y = yes , y = no) basant-se en una funció logística. 
+
+Per a fer-ho, partim les dades en un 70% per a entrenament i l'altre 30% per a test. 
+
+```{r}
+set.seed(22)
+# realitzem la partició
+partition <- createDataPartition(bank.clean$y, p = 0.7, list = FALSE)
+bank.train <- bank.clean[partition, ]
+bank.test <- bank.clean[-partition, ]
+
+# executem l'entrenament 10 cops per validar el model a partir de la qualitat basada en el AIC
+control <- trainControl(method = "cv", number = 10, classProbs = TRUE)
+
+# entrenem el model i treiem els resultats
+log.trained <- train(y ~., data = bank.train, method = "glm", trControl = control)
+summary(log.trained)
+```
+
+Podem veure la importància de cada una de les variables en la funció logarítmica que s'ha generat. Per cada valor de cada categoria ha generat un atribut propi per a la funció.
+
+```{r}
+log_imp <- varImp(log.trained, scale = FALSE, competes = FALSE)
+log_imp
+```
+
+Com ja havíem vist en estudis anteriors la variable que te més pes és 'duration', seguit de 'poutcome' quan es success. El tercer és 'contact' quan és unknown **(d'aquí la importancia de deixar de vegades els null o valors desconeguts)**.
+
+I ara realitzen la predicció i treiem una matriu de confusió per a veure la qualitat de la predicció del model.
+
+```{r}
+pred_log <- predict(log.trained, newdata = bank.test)
+confusionMatrix(pred_log, bank.test$y)
+```
+
+Tenim una molt bona predicció > 91%, però prediu molt millor els 'no', quan volem saber si un client no contractarà un crèdit bancari que els 'yes'. Tenim un alt nombre de falsos positius.
+
+### Predicció mitjançant classificació (Random Forest)
+
+El que anem a fer en aquest apartat és una predicció mitjançant un algoritme de classificació. En tenim de diferents tipus, i en aquest cas farem servir Random Forest.
+
+Un Random Forest és un conjunt d'arbres de decisió combinats amb bagging. A l'usar bagging, el que en realitat està passant, és que diferents arbres veuen diferents porcions de les dades. Cap arbre veu totes les dades d'entrenament. Això fa que cada arbre s'entreni amb diferents mostres de dades per a un mateix problema. D'aquesta manera, al combinar els seus resultats, uns errors es compensen amb altres i tenim una predicció que generalitza millor.
+
+Per a realitzar l'examen dividim el conjunt de dades en un 70% d'entrenament i l'altre 30% per a fer proves.
+
+```{r}
+set.seed(22)
+
+# separem el 70% de conjunt d'entrenament del 30% per a avaluar
+random.data <- sample(1:nrow(bank.clean), 0.70 * nrow(bank.clean))
+
+train <- bank.clean[random.data,]
+test <- bank.clean[-random.data,]
+
+# en les dades d'entrenament, separem les dades per a generar l'arbre de la dada objectiu (target)
+train.x <- train[,1:16]
+train.y <- train[,17]
+
+# en les dades de test, separem les dades per a generar l'arbre de la dada objectiu (target)
+test.x <- test[,1:16]
+test.y <- test[,17]
+
+train_rf <- randomForest(y~.,data = train, ntree = 50)
+
+predicted.model <- predict(train_rf,test.x)
+
+
+print(sprintf("La precissió de l'arbre és del: %.2f %%",100*sum(predicted.model == test.y) / length(predicted.model)))
+matrix.conf <- table(Class=predicted.model,Predicted=test.y)
+percent.correct <- 100 * sum(diag(matrix.conf)) / sum(matrix.conf)
+print(sprintf("L'error de classificació és: %.2f %%",100 - percent.correct))
+mosaicplot(matrix.conf)
+confusionMatrix(predicted.model,test.y, dnn = c("Prediction"))
+
+```
+
+  - Accuracy:  0.9108
+  - Prediction 'no': 0.9263
+  - Prediction 'yes': 0.6496
+
+Tenim altre cop molt bona predicció > 90% però i predicció del 'no' també és força baixa 0.6496. Tenim altre cop força falsos positius.
+
+******
+# Resolució del problema. A partir dels resultats obtinguts, quines són les conclusions? Els resultats permeten respondre al problema?
+******
+
+Com hem vist durant tot l'exercici hem realitzat diverses proves tant de anàlisi exploratori, neteja de les dades, proves estadístiques i finalment proves amb algoritmes supervisats.
+
+El que hem analitzat principalment ha estat amb la correlació, quins atributs tenen més impacte en els atributs 'balance' (saldo mitjà anual) i 'y' (si contracten dipòsit a termini o no).
+
+A més hem realitzat una regressió logarítmica per a predir el probable comportament dels usuaris als quals se'ls farà una campanya de marketing. Entre altres variables podem dir que el temps a la trucada és rellevant, però això també és un factor que no es pot saber a priori. Altres factors important alhora de decidir per trucar a uns clients o uns altres seria: si ja han contractat previament un crèdit o si tenen un prèstec d'habitatge.
+
+També amb el contrast d'hipòtesi hem comprovat que no tenir crèdit per defecte, no tenir hipoteca o tenir més estudis influeix en la quantitat de diners de mitja anual que es te en el banc.
+
+En quant a la neteja de dades, remarcar que incloure uns valors nulls com a categoria pròpia ens ha ajudat a tenir millors prediccions en els algoritmes de classificació.

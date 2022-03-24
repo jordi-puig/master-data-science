@@ -1,0 +1,1216 @@
+---
+title: 'Estadística Avançada'
+author: "Autor: Jordi Puig Ovejero"
+date: "Maig 2021"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(eval=T, echo=T)
+```
+
+Carrega de les llibreries que es necessiten 
+```{r message= FALSE, warning=FALSE}
+library(dplyr)
+library(base)
+library(matrixStats)
+library(stringr)
+library(ggplot2)
+library(lubridate)
+library(eeptools)
+library(psych)
+library(corrplot)
+library(factoextra)
+library(ggbiplot)
+library(ggpubr)
+library(rlang)
+library(kableExtra)
+library(ResourceSelection)
+library(pROC)
+library(data.table)
+library(nortest)
+library(caret)
+library(agricolae)
+library(sjmisc)
+library(MASS)
+library(psych)
+```
+
+******
+# Introducció
+******
+
+En aquest darrer exercici anem a estudiar les indemnitzacions per baixa laboral atorgades per una companyia d'assegurançes al llarg del temps.
+
+El conjunt de dades té els següents atributs:
+
+## Definició dels atributs
+
+* ClaimNumber: Identificador de la pòlissa.
+* DateTimeOfAccident: Data de l’accident.
+* DateReported: Data que es comunica a la companyia i aquesta obre un expedient del sinistre (obertura).
+* Age: Edat del treballador.
+* Gender: Sexe.
+* MaritalStatus: Estat civil, (M)arried, (S)ingle, (U)nknown.
+* DependentChildren: Nombre de fills dependents.
+* DependentsOther: Nombre de dependents excloent fills
+* WeeklyWages: Salari setmanal (en EUR).
+* PartTimeFullTime: Jornada laboral, Part time (P) o Full time(F).
+* HoursWorkedPerWeek: Nombre d’hores per setmana.
+* DaysWorkedPerWeek: Nombre de dies per setmana.
+* ClaimDescription: Descripció sinistres.
+* InitialIncurredClaimCost: Estimació inicial del cost realitzat per la companyia.
+* UltimateIncurredClaimCost: Cost total pagat per sinistre.
+
+******
+# Lectura del fitxer i preparació de les dades
+******
+
+El fitxer on es troba el dataset és, **trainClean.csv**:
+
+Carreguem les dades i fem un summary d'aquestes.
+```{r message= FALSE, warning=FALSE}
+insurance <- read.csv('trainClean.csv',stringsAsFactors = TRUE, sep = ',')
+attach(insurance) # ens permet referenciar les columnes de fifa sense haver d'especificar el dataset.
+summary(insurance)
+```
+
+
+Contem les files i columnes que tenim.
+```{r message= FALSE, warning=FALSE}
+cat('Tenim un total de', ncol(insurance), 'columnes\n')
+cat('Tenim un total de', nrow(insurance), 'registres')
+```
+
+I mostrem els valors NA per cada atribut.
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(insurance))
+```
+Finalment fem un head dels atributs a tractar.
+
+```{r}
+head(insurance)
+```
+
+
+Amb una ràpida ullada podem dir que: 
+
+* Nombre de registres: 145952
+* Nombre d'atributs totals: 28
+* Tenim valors NA a: Sembla que no tenim valors NA's però potser tenim en blanc.
+
+
+## Preparació de les dades
+
+
+### Canvi de nom de les variables
+
+Passem el nom de les variables al castellà. Fem servir la funció setnames de llibreria data.table.
+
+```{r}
+
+setnames(insurance,"ClaimNumber", "Id")
+setnames(insurance,"DateTimeOfAccident", "Ocurrencia")
+setnames(insurance,"DateReported", "Apertura")
+setnames(insurance,"Age", "Edad")
+setnames(insurance,"Gender", "Sexo")
+setnames(insurance,"MaritalStatus", "Estado")
+setnames(insurance,"DependentChildren", "Dependientes")
+setnames(insurance,"DependentsOther", "OtrosDepend")
+setnames(insurance,"WeeklyWages", "Salario")
+setnames(insurance,"PartTimeFullTime", "Jornada")
+setnames(insurance,"InitialIncurredCalimsCost", "CosteInicio")
+setnames(insurance,"UltimateIncurredClaimCost", "CosteFinal")
+setnames(insurance,"HoursWorkedPerWeek", "HorasSemana")
+setnames(insurance,"DaysWorkedPerWeek", "DiasSemana")
+setnames(insurance,"ClaimDescription", "Descripcion")
+
+colnames(insurance)
+```
+
+### Conversió de tipus de Occurrencia i Apertura a tipus Date
+
+```{r}
+# efectivament Occurencia i Apertura están com a Factor
+class(insurance$Ocurrencia)
+head(insurance$Ocurrencia)
+# passem a Data
+insurance$Ocurrencia <- as.Date(insurance$Ocurrencia, format="%Y-%m-%dT%H:%M:%SZ")
+class(insurance$Ocurrencia)
+head(insurance$Ocurrencia)
+
+# fem el mateix amb Apertura
+class(insurance$Apertura)
+head(insurance$Apertura)
+# passem a Data
+insurance$Apertura <- as.Date(insurance$Apertura, format="%Y-%m-%dT%H:%M:%SZ")
+class(insurance$Apertura)
+head(insurance$Apertura)
+```
+
+### Crear variable Tiempo
+
+Per crear la variable tiempo calculem els dies entre la Ocurrencia i la Apertura,
+
+```{r}
+insurance$Tiempo <- age_calc(insurance$Ocurrencia, enddate = insurance$Apertura, units = "days")
+head(insurance$Tiempo)
+insurance$Tiempo <- as.integer(insurance$Tiempo)
+```
+
+## Classificació del temps
+
+En aquest cas donem un valor a Clasificacion segons el valor que hem calculat previament a Tiempo.
+
+```{r}
+insurance$Clasificacion <- ''
+insurance$Clasificacion <- ifelse(insurance$Tiempo >= 90, 'Molt lent', insurance$Clasificacion)
+insurance$Clasificacion <- ifelse(insurance$Tiempo <= 89 & insurance$Tiempo >= 31, 'Lent', insurance$Clasificacion)
+insurance$Clasificacion <- ifelse(insurance$Tiempo <= 30 & insurance$Tiempo >= 16, 'Rapid', insurance$Clasificacion)
+insurance$Clasificacion <- ifelse(insurance$Tiempo < 16, 'Molt Rapid', insurance$Clasificacion)
+insurance$Clasificacion <- as.factor(insurance$Clasificacion)
+```
+
+
+## Valors absents
+
+Analitzem el nombre de categories a ‘Descripcion‘, ‘Sexo‘ i ‘Estado‘:
+
+```{r}
+## Descripcion
+nlevels(insurance$Descripcion)
+
+## Sexo
+summary(insurance$Sexo)
+
+## Estado
+summary.factor(insurance$Estado)
+```
+
+Hem mostrat els levels de Sexo i Estado i veiem que tenim valors U (Undefined) o valors buïts. 
+
+Per a description només he comptabilitzat la qüantitat de levels ja que hi han moltíssims levels (28114). Entenc que en el formulari a l'introduir-ho d'entrada deu ser un camp de tipus text lliure.
+
+```{r}
+insurance$Sexo[insurance$Sexo== "U"] <- NA
+insurance$Estado[insurance$Estado== "U"] <- NA
+insurance$Estado[insurance$Estado== ""] <- NA
+colSums(is.na(insurance))
+
+cat('Tenim un ', 2/nrow(insurance) * 100, '% de NA a Sexo\n')
+cat('Tenim un ', (5294+2)/nrow(insurance) * 100, '% de NA a Estado')
+```
+
+Tenim quasi un 10% de valors NA's a Estado i a Sexo la quantitat és insignificant. Realment el que jo faria seria eliminar els registres a Sexo. A Estado podriem fer una imputació de valors mitjançant per exemple l'algoritme de Knn (trobem els veins propers a partir dels altres atributs i atorguem un valor).
+
+L'exercici demana eliminar els valors absents i això és el que farem.
+
+```{r}
+claimNet <- subset(insurance, !is.na(insurance$Sexo))
+# esborrem els levels buïts
+claimNet$Sexo <- droplevels(claimNet$Sexo)
+
+claimNet <- subset(claimNet, !is.na(claimNet$Estado))
+# esborrem els levels buïts
+claimNet$Estado <- droplevels(claimNet$Estado)
+
+colSums(is.na(claimNet))
+cat('Hem eliminat un ', (nrow(insurance) - nrow(claimNet)) / nrow(insurance) * 100, '% de registres')
+```
+
+## Salut mental
+
+Creem la variable RiesgoSM que és 1 si Descripcion conté les paraules 'Stress, Anxiety, Harassment o Depression' altrament serà 0.
+
+```{r}
+custom_regex <- function(sentence) {
+  strings <- c("Stress", "Anxiety", "Harassment", "Depression")
+  output <- 0
+  for (value in strings) {
+    if (str_contains(strsplit(sentence, " "), value, ignore.case = TRUE, logic = "OR", switch = FALSE)) {
+      output <- 1
+    }
+  }
+  return <- output
+}
+
+claimNet$RiesgoSM <- lapply(as.character(claimNet[,13]), custom_regex)
+claimNet$RiesgoSM <- as.factor(as.integer(claimNet$RiesgoSM))
+summary(claimNet$RiesgoSM)
+```
+
+
+## Anàlisi visual
+
+Anem a fer un analísi visual de la variable CosteFinal (cost final dels diners percebuts) respecte:
+
+### Sexe
+
+```{r}
+boxplot(CosteFinal ~ Sexo, data = claimNet, log = "y")
+```
+
+En general tant la mitjana, com el Q1 i Q3, mínim i màxim, sembla que el percebut per el sexe Femení sigui llegeurament superior al masculí.
+
+
+### Estado
+
+```{r}
+boxplot(CosteFinal ~ Estado, data = claimNet, log = "y")
+```
+
+El mateix i molt similar passa entre els solters i cassats. Aquests darrers tenen en general sinistres amb imports superiors als cassats (sembpre parlant en termes globals, clar).
+
+### Clasificacion
+
+```{r}
+boxplot(CosteFinal ~ Clasificacion, data = claimNet, log = "y")
+```
+
+La velocitat en el tràmit en l'expedició del sinistre no sembla molt rellevat. Potser els tràmits més ràpids (menys temps entre que succeeix i s'obre expedient) són els que tenen un import més elevat. 
+
+
+### RiesgoSM
+
+```{r}
+boxplot(CosteFinal ~ RiesgoSM, data = claimNet, log = "y")
+```
+
+Finalment on si és veu realment una diferència molt clara és amb la tipologia del sinistres. Si és per temes mentals tenen un import final molt més alt que no pas la resta.
+
+
+Resumint, segons els boxplot que hem pogut veure: per a l'assegurança, el pitjor cas seria un sinistre d'una dona, casada i amb malaltia mental, de cara a la despesa final.
+
+
+## Comprovació de normalitat
+
+Fem una comprovació de la normalitat de la variable CosteFinal:
+
+### Anàlisi visual
+
+```{r}
+summary(claimNet$CosteFinal)
+```
+
+Amb el summary veiem que la mediana és 2982, força allunyat de la mitja 9704.6. Tenim valor força allunyats dels 1Q i sobretot del 3Q amb el que podriem estar davant de outliers.
+
+```{r}
+boxplot(claimNet$CosteFinal, data = claimNet, log = "y")
+```
+
+```{r}
+hist(claimNet$CosteFinal, breaks=100)
+
+y = dnorm(claimNet$CosteFinal, mean(claimNet$CosteFinal), sd(claimNet$CosteFinal))
+plot(claimNet$CosteFinal, y)
+```
+
+
+Tant amb l'histograma o plot anterior no veiem la clàssica corva normal però tenim una corva assimptòtica com la mostrada amb el que probablement sigui una distribució lognormal.
+
+
+### Anàlisi de normalitat de Lilliefors
+
+Al igual que el test de normalitat Shapiro-Wilk, es treballa amb la hipòtesi nul·la de normalitat de dades. Valors de p per sota del nivell de significança rebutjen la hipòtesi nul·la i per tant descartem la normalitat.
+
+```{r}
+lillie.test(claimNet$CosteFinal)
+```
+
+Segons el test, tenim un val0r per tota de 0.05 i hem de rebutjar la hipòtesi nul·la de normalitat de les dades en l'atribut CosteFinal.
+
+
+### Anàlisi en escala logarítimica
+
+Amb el boxplot en escala logaritmica podem veure la distribució normal de forma visual.
+
+```{r}
+ggplot(mapping= aes(x=claimNet$CosteFinal))+ geom_density() + scale_x_continuous(trans='log')
+
+```
+
+A més si fem el test de Lilliefors tenim un valor molt per sobre del nivell de confiança. Per tant, podem concloure que tenim una distribució normal en les dades.
+
+```{r}
+lillie.test(log(claimNet$CosteFinal))
+```
+
+Tenim una distribució normal exponencial. Visualment i amb el test de Lilliefors podem concloure, amb les dades en escala logarítmica, que estem davant d'una distribució normal. A més, podem assumir normalitat per el Teorema Central del Límit ja que la mostra és prou gran.
+
+******
+# Estadística inferencial
+******
+
+A partir del conjunt de dades claimNet anem a realitzar diversos test d'estadística inferencial.
+
+## Interval de confiança de la mitjana poblacional de la variable CosteFinal
+
+Anem a calcular l'interval de confiança sobre l'atribut CosteFinal
+
+Anem a calcular l'interval [L,U] tal que la probabilitat que z (un valor de la mostra) estigui en aquest interval sigui de 0.95. 
+
+Per calcular l'interval amb aquesta probabilitat necessitem el valor crític per al nivell de confiança del 95% que és α / 2. Aquest valor el càlculem amb la funció qnorm.
+
+
+```{r}
+qnorm(0.975)
+```
+
+Podem assumir normalitat ja que a partir del Teorem Central de Límit (TCL) podem dir que la mitjana de la mostra s’aproxima a una distribució normal quan el nombre d’elements està per sobre de 30 (n > 30). En el nostre cas, està molt per sobre de 30.
+
+Donem per fet que la desviació estandard és la de la mostra que tenim. Llavors per calcular els límits superior i inferior de l'interval:
+
+```[mean - z * SE], [mean + z * SE], on SE = sd / √n```
+
+```{r}
+sd <- sd(claimNet$CosteFinal)
+alfa <- 1- 0.95
+n <- nrow(claimNet)
+SE <- sd / sqrt(n)
+z <- qnorm(alfa/2, lower.tail=FALSE)
+L <- mean(claimNet$CosteFinal) - z*SE
+U <- mean(claimNet$CosteFinal) + z*SE
+round(c(L,U), 2)
+```
+
+Llavors, podem concloure que la mitjana de CosteFinal amb un nivell de confiança de 95% és troba entre els valors 9281.64 i 10127.52.
+
+
+Realment no tenim la variància de la mostra de CosteFinal. Per tant, el que fem és trobar una estimació d'aquesta a partir de la mostra que tenim. En aquest cas, la variable segueix una distrobució de t d'Student amb n - 1 graus de llibertat on amb mides grans s'apropa a una distribució normal (n és el nombre d'elements de la mostra).
+
+
+```{r}
+alfa <- 1-0.95
+sd <- sd(claimNet$CosteFinal)
+n <- nrow(claimNet)
+SE <- sd / sqrt(n)
+z <- qt(alfa/2, df=n-1, lower.tail=FALSE)
+L <- mean(claimNet$CosteFinal) - z*SE
+U <- mean(claimNet$CosteFinal) + z*SE
+round( c(L,U), 2)
+```
+Tenim el mateix valor que amb la desviació estandard calculada de la mostra.
+
+Confirmem els valors de la sol·lució amb la funció t.test. Obtenim l'interval de confiança de forma automàtica amb el mateix resultat.
+
+
+```{r}
+t.test(claimNet$CosteFinal, conf.level = 0.95)
+```
+
+## Contrast d’hipòtesi per a la diferència de mitjanes
+
+Volem saber si la indemnització a les dones supera la dels homes en 1000 euros amb un nivell de confiança del 95%.
+
+
+### Escriviu la hipòtesi nul·la i l’alternativa
+
+  * Hipòtesi nul·la: θ CosteFinal de les dones <= θ CosteFinal dels homes + 1000
+  * Hipòtesi alternativa: θ CosteFinal de les dones > θ CosteFinal dels homes + 1000
+
+### Justificació del test a aplicar
+
+El mètode que aplicarem és:
+
+* És un test d’hipòtesi de dues mostres, ja que estem comparant paràmetres de dues poblacions (homes i dones).
+
+* Assumim distribució normal ja que les mostres tenen més de 30 elements.
+
+```{r}
+summary(claimNet$Sexo)
+```
+
+
+* Es tracta d’un test paramètric ja que estem assumint que les dades segueixen una determinada distribució, en aquest cas distribució normal o més concretament t de Student ja que la variància de les mostres l’haurem d’inferir.
+
+
+* Test unilateral:
+
+Donada la nostre hipòtesi alternativa és tracta d’un test unilateral. Per a rebutjar la hipòtesi nul·la cal observar un valor superior en 1000 en el CosteFinal de les dones sobre els homes.
+
+Ho: µd <= 1000 -> la diferència de mitjanes és menor o igual a 1000.
+
+H1: µd > 1000 -> la diferència és más gran de 1000. 
+
+
+* Homocedasticitat o heteedasticitat?
+
+Les variàncies són desconegudes però similars quan podem assumir homocedasticitat, quan són diferents diem que podem assumir heterocedasticitat.
+
+Saber quin tipus de variàncies tenim anem a realitzar el test d’igualtat de variàncies.
+
+Hem d’aplicar el test d’igualtat de variàncies:
+
+Ho: σ²₁ = σ²₂
+H1: σ²₁ ≠ σ²₂
+
+Calculem els valors de les variançes mostrals i calculem el valor observat a partir de la distribució F d’Snedecor.
+
+
+Separem les mostres per sexe:
+
+```{r}
+# seleccionem grups per sexe
+claimNet.Hombres <- subset(claimNet, claimNet$Sexo == 'M')
+claimNet.Mujeres <- subset(claimNet, claimNet$Sexo == 'F')
+```
+
+
+```{r}
+# el nivell de confiança és del 95% per tant tenim una alpha de 0.05 (P=0.95)
+alfa <- 0.05
+
+# calculem les desviacions de les mostres
+sd1 <- sd(claimNet.Hombres$CosteFinal)
+sd2 <- sd(claimNet.Mujeres$CosteFinal)
+
+# calculem les mitjes de les mostres
+mean1 <- mean(claimNet.Hombres$CosteFinal)
+mean2 <- mean(claimNet.Mujeres$CosteFinal)
+
+# elements de les mostres
+n1 <- length(claimNet.Hombres$CosteFinal)
+n2 <- length(claimNet.Mujeres$CosteFinal)
+
+# valor observat de la mostra
+fobs <- sd1^2 / sd2^2
+cat("El valor observat és:", fobs, "\n")
+
+# llindar inferior de la zona d'acceptació
+fcritL <- qf(alfa/2, df1=n1-1, df2=n2-2)
+cat("El llindar inferior és:", fcritL, "\n")
+
+# llindar superior de la zona d'acceptació
+fcritU <- qf(1 - alfa/2, df1=n1-1, df2=n2-2)
+cat("El llindar superior és:", fcritU, "\n")
+
+# calculem la probabilitat d'obtenir el valor observat assumint que la hipòtesi nul·la és certa. Si p < alpha, podem rebutjar la hipòtesi nul·la.
+pvalue <- min(pf(fobs, df1=n1-1, df2=n2-2, lower.tail=FALSE ), pf(fobs, df1=n1-1, df2=n2-2))*2
+cat("El valor de p és:", pvalue, "\n")
+```
+
+El valor observat és de 0.6348912 que no és troba en la zona d’acceptació [0.9707573, 1.030373], això fà que rebutjem la hipòtesi nul·la i concloem que tenim heterocedasticitat.
+
+Anàlogament hem càlculat la p que és molt per sota de l’alfa i per tant també ens indica que no acceptarem la hipòtesi nul·la.
+
+
+### Càlculs
+
+Anem a realitzar els càlculs per a poder inferir la nostre premisa inicial. A la diferencia de mitjanes li restem 1000 que és el "offset" que volem sobre la mitjana dels homes.
+
+```{r}
+# càlculs de mean, n i s
+mean_Hombres <- mean(claimNet.Hombres$CosteFinal)
+cat("mean_Hombres és:", mean_Hombres, "\n")
+
+mean_Mujeres <- mean(claimNet.Mujeres$CosteFinal)
+cat("mean_Mujeres és:", mean_Mujeres, "\n")
+
+n_Hombres <- length(claimNet.Hombres$CosteFinal)
+cat("n_Hombres és:", n_Hombres, "\n")
+
+n_Mujeres <- length(claimNet.Mujeres$CosteFinal)
+cat("n_Mujeres és:", n_Mujeres, "\n")
+
+s_Hombres <- sd(claimNet.Hombres$CosteFinal)
+cat("s_Hombres és:", s_Hombres, "\n")
+
+s_Mujeres <- sd(claimNet.Mujeres$CosteFinal)
+cat("s_Mujeres és:", s_Mujeres, "\n")
+
+# estadístic de contrast
+obs_value <- (mean_Mujeres - mean_Hombres - 1000) / (sqrt((s_Hombres^2 / n_Hombres) + (s_Mujeres^2 / n_Mujeres)))
+cat("L'estadístic de contrast o valor observat és:", round(obs_value, 3), "\n")
+
+# graus de llibertat
+v <- ((s_Hombres^2 / n_Hombres) + (s_Mujeres^2 / n_Mujeres))^2 / (((s_Hombres^2 / n_Hombres)^2 / (n_Hombres - 1)) + ((s_Mujeres^2 / n_Mujeres)^2 / (n_Mujeres - 1)))
+cat("Els graus de llibertat són:", round(v,1), "\n")
+
+# valor crític on rebutjem la H0 en favor de la alternativa.
+# com volem la part superior de la corva, fem lower.tail = FALSE
+critical <- qt(0.005, lower.tail = FALSE, df=round(v,1)-1)
+cat("La regió d'acceptació de la hipòtesi nul·la està entre ( -infinit,", critical, "]\n")
+
+# Càlcul del valor pvalue
+pvalue <- pt(obs_value, lower.tail = FALSE, df=round(v,1)-1)
+cat("La probabilitat de que rebutjar la hipòtesi sigui nul·la incorrecte és:", pvalue, "\n")
+```
+
+Fem el test automatitzat. Notem que el valor de mu no es 0 sino els 1000 euros que volem de diferència.
+
+```{r}
+t.test(claimNet.Mujeres$CosteFinal, claimNet.Hombres$CosteFinal,alternative="greater", var.equal=FALSE, mu = 1000)
+```
+
+### Interpretació del test
+
+El valor observat, 3.592, està per sobre de la zona d'acceptació de la hipòtesi nul·la (-infinit, 2.576141], per tant rebutjem que la indemnització de les dones NO supera en 1000 euros la dels homes amb un nivell de confiança del 95%. A més, el valor de p-value 0.0001648202 < 0.05 ens ho confirma.
+
+
+******
+# Model de regressió lineal
+******
+
+Anem a calcular un model de regressió lineal entre la variable explicada CosteFinal i les explicatives, Edad, Sexo, Estado, Dependientes, OtrosDepend, Salario, Jornada, HorasSemana, DiasSemana, Clasificacion, RiesgoSM, CosteInicio. Tant CosteInicio com CosteFinal les passem a escala logarítmica.
+
+
+Creem una columna de CosteFinal i CosteInicio en escala logaritmica i per el CosteInicio hem de transformar amb la forma exp(mu + var/2) on mu i var son mitjana i variància de la transformació logarítimica.
+
+```{r}
+claimNet$CosteFinal.log <- log(claimNet$CosteFinal)
+claimNet$CosteInicio.log <- log(claimNet$CosteInicio) 
+```
+
+
+```{r}
+claimNet.model <- lm(CosteFinal.log ~ Edad + Sexo + Estado + Dependientes + OtrosDepend + Salario + Jornada + HorasSemana + DiasSemana + Clasificacion + RiesgoSM + CosteInicio.log, data = claimNet)
+```
+
+Els valors de la recta de regressió són:
+
+```{r}
+coef(claimNet.model)
+```
+
+La recta quedaria de la forma següent:
+
+log(CosteFinal) = 1.52 + 0.004xEdad - 0.143xSexoM + ...
+
+
+## Interpretació del model
+
+Fem un summary per veure el resultat del model.
+
+```{r}
+summary(claimNet.model)
+```
+
+
+Veiem que les variables més significatives, aquelles que la Pr(>|t|) < 0.05 són: Edad, Sexo(M), CosteInicio.log, Salario, DiasSemana, Dependientes, Estado(S), Jornada(P).
+
+També ho podem veure amb el valor del coeficient estimat. Per exemple, CosteInicio.log té un coeficient de 0.827 positiu i afecta força al resultat.
+
+
+Ara anem a comprobar la qualitat del model a partir del coeficient de determinació R² i l'anàlisi dels residus on SQT = SQR + SQE on sabem que R_square = SQR / SQT. Si R² és igual a 1 l'ajust és perfecte. Anem a mostrar el valor del R-Squared (R²):
+
+
+```{r}
+summary(claimNet.model)$r.squared
+```
+
+
+Tenim un valor de 0.73, és a dir, el conjunt de les variables aporta només un 73% de la variabilitat total. Tenim una bondat en l'ajust no excesivament baixa encara que podria ser millor.
+
+
+## Anàlisi residus
+
+
+Fem un anàlisi dels residus a partir del summary del model:
+
+```{r}
+summary(claimNet.model$residuals)
+```
+
+Tenim una Mediana propera a 0 com és normal. Els 1Q - 3Q i Min - Max són força simètrics respectivament, amb el que sembla que tinguem una distribució força normal.
+
+
+Si visualitzem els intervals de confiança dels coeficients de la recta:
+
+```{r}
+confint(claimNet.model)
+```
+
+Veiem alguns atributs, com per exemple RiesgoSMTRUE, on el valor fluctua molt. Aquest valors és on s'espera que es trobi el coeficient del nostre model per cadad atribut. Quan més petit és l'interval, més acurat serà.
+
+
+Anem a fer un diagnosi del model trobat. Per això fem dues gràfiques, un amb els valors estimats enfront dels residus, per poder veure si la variança es constant i el gràfic quantil-quantil per comparar els resudis del model amb els valors d’una variable amb distribució normal.
+
+
+### Valors ajustats enfront dels residus
+
+```{r}
+residus <- rstandard(claimNet.model)
+valors.ajustats <- fitted(claimNet.model)
+plot(valors.ajustats, residus)
+```
+
+Veiem la dispersió del residus i podriem dir que el model no segueixi una dispersió aleatoria. Per tant, sembla que el model obtingut no s'ajusta bé a les dades mostrals.
+
+
+### QQPlot
+
+Finalment hem executat QQ plot per saber si els errors és distribueixen de forma normal. En el mig del gràfic sembla que així sigui però es va convant en els extrems.
+
+
+```{r}
+model.stdres = rstandard(claimNet.model)
+qqnorm(model.stdres, 
+     ylab="Standardized Residuals", 
+     xlab="Normal Scores", 
+     main="QQ Plot") 
+qqline(model.stdres)
+```
+
+
+Una altre forma de comprobar la normalitat és amb un gràfic de densitat a partir dels residus.
+
+```{r}
+d<-density(claimNet.model[['residuals']])
+plot(d,main='Residual KDE Plot',xlab='Residual value')
+```
+
+
+
+Aquesta gràfica sembla que ens doni normalitat. Farem un contrast d'hipòtesi:
+
+```{r}
+lillie.test(claimNet.model$residuals)
+```
+
+El valor per sota de 0.05 fa rebutjar la hipòtesi nul·la de normalitat i el que el nostre model sigui vàlid.
+
+
+## Predicció
+
+Anem a realitzar una predicció amb el model que hem generat i les variables: Edad=24, Sexo= "F", Estado="S", Dependientes=1, OtrosDepend=0, Salario=500, Jornada="F", HorasSemana=40, DiasSemana=5, Clasificacion="Lent", RiesgoSM="TRUE" y CosteInicio=10000.
+
+
+```{r}
+data = data.frame(Edad=24, Sexo= "F", Estado="S", Dependientes=1, OtrosDepend=0, Salario=500, Jornada="F", HorasSemana=40, DiasSemana=5, Clasificacion="Lent", RiesgoSM="1", CosteInicio.log=log(10000))
+
+predict(claimNet.model, data)
+```
+
+Aquest valor però és el del logaritme. Calculem el valor amb la notació: *exp(mu + var/2) on mu i var són la mitjana i la variància de la transformació logarítmica.*
+
+```{r}
+summary(claimNet.model)
+
+# calculem la desviació dels residuals
+sd.res <- sd(claimNet.model$residuals)
+
+# fem la predicció
+pred <- exp(predict(claimNet.model, data) + (0.5 * sd.res))
+pred
+
+```
+
+La predicció del valor amb aquestes dades és de 20190.15.
+
+
+# Regressió logística
+
+Anem a realitzar model de regressió logístic on es predigui si l'estimació inicial (CosteInicio) és inferior al pagat finalment. Aquesta variable de sortida serà la variable Deficit. El valor serà 1 si el cost final ha estat superior al inicial.
+
+```{r}
+claimNet$Deficit <- ifelse(claimNet$CosteInicio >= claimNet$CosteFinal, 0, 1)
+```
+
+## Model predictiu
+
+Realitzem el model predictiu amb les mateixes variables que en l'exercici anterior. Fem servir family=binomial(link=logit) ja que el resultat és binari.
+
+```{r}
+model.logist=glm(formula=Deficit ~ Edad + Sexo + Estado + Dependientes + OtrosDepend + Salario + Jornada + HorasSemana + DiasSemana + Clasificacion + RiesgoSM + log(CosteInicio), data = claimNet, family=binomial(link=logit))
+
+summary(model.logist)
+```
+
+Veiem que les variables amb un pes Pr(>|z|) < 0.05 significatives són, Edad, Sexo, Estado, Dependientes, Salario, Jornada, DiasSemana i log(CosteInicio). També podriem afegir, pero menys, quan la Clasificacion és 'Molt Lent', el tràmit és demora. També ho és el valor de la intersecció, quan totes les variables són 0. Les altres (p-valor > 0.05) no són significatives per al nostre model. 
+
+
+Veiem el valors que poden prendre els coeficients entre un 2.5 i 97.5% de confiança:
+
+```{r}
+confint(model.logist)
+```
+
+I calculem els OR(Odds Ratio):
+
+```{r}
+exp(coefficients(model.logist))
+```
+
+Amb aquests OR podem dir, per exemple que Salario no és significativa ja que, encara que el p-valor era inferior a 0.05, amb un OR de 1 no afecta al resultat de Deficit. Passa similar amb la variable Edad. Coeficients amb valors al voltant de 1 no tenen un efecte sobre el resultat rellevant.
+
+
+## Interpretació
+
+Anem a aplicar el test de Hosman-Lemeshow per a calcular la bondat de l’ajust. 
+
+Comparem els valors previstos (esperats) amb els observats. Fem un contrast d’hipòtesi on la nul·la ens diu que no hi ha diferències entre els valors per tant la alternativa indica que el model no és correcte.
+
+```{r}
+hoslem.test(claimNet$Deficit,fitted(model.logist))
+```
+
+Amb el p-value < 0.05 rebutgem la hipòtesi nul·la amb el que el model no ajusta bé les dades.
+
+Ara amb la corva ROC també verifiquem la qualitat del model. Si l'area de la corva s'apropa més a 1 el model és millor:
+
+```{r}
+prob=predict(model.logist, claimNet, type="response")
+r=roc(claimNet$Deficit,prob, data=claimNet)
+plot(r)
+auc(r)
+```
+
+No tenim un model excessivament dolent encara que no és molt acurat. Segons el test de Hosman-Lemeshow podem dir que el model no seria correcte. La corva de ROC no és molt dolenta però.
+
+## Matriu de confusió
+
+Anem a veure la matriu de confusió en la qual observarem la predicció del model. Considerem un 1 si la probabilitat >= 0.5 i 0 en cas contrari. Fem la comparació dels resultats amb la sortida real.
+
+```{r}
+pdata <- predict(model.logist, newdata = claimNet, type = "response")
+pdata <- ifelse(pdata >= 0.5, 1, 0)
+confusionMatrix <- confusionMatrix(data = as.factor(pdata) , reference = as.factor(claimNet$Deficit))
+confusionMatrix
+```
+
+**La class positive és el valor 0**, és a dir, el cost final no és superior al inicial. A partir d'aquí veiem que:
+
+```{r}
+paste('True Positive:', confusionMatrix$table[1], '(hem predit 0 i hem encertat)')
+paste('True Negative:', confusionMatrix$table[4], '(hem predit 1 i hem encertat)')
+paste('False Positive:', confusionMatrix$table[3], '(hem predit 0 i hem errat)')
+paste('False Negative:', confusionMatrix$table[2], '(hem predit 1 i hem errat')
+```
+
+
+* True Positive: 9764 (hem predit 0 i hem encertat)
+* True Negative: 22054 (hem predit 1 i hem encertat)
+* False Positive: 5900 (hem predit 0 i hem errat)
+* False Negative: 10957 (hem predit 1 i hem errat)
+
+* Calculem l'accuracy o precissió en el model. És el total de encerts dividit per el total de la mostra.
+
+```{r}
+(confusionMatrix$table[1] + confusionMatrix$table[4]) / (confusionMatrix$table[1] + confusionMatrix$table[2] + confusionMatrix$table[3] + confusionMatrix$table[4])
+```
+
+* Sensibilitat. De les classes positives, quantes hem predit correctament. 
+
+```{r}
+confusionMatrix$table[1] / (confusionMatrix$table[1] + confusionMatrix$table[2])
+```
+* Especificitat (Specificity). De les classes negatives, quantes hem predit correctament. 
+
+```{r}
+confusionMatrix$table[4] / (confusionMatrix$table[4] +  confusionMatrix$table[3])
+```
+Tenim molt millor especifitat que sensibilitat. Amb aquest model ens és més fàcil trobar els negatius, és a dir, el casos en els quals el preu final és superior al inicial.
+
+
+
+## Predicció
+
+Anem a predir la probabilitat per:
+
+* Home 
+* 20 anys d’edat
+* Solter
+* sense fills 
+* Ni altres dependents
+* Salari setmanal de 300 EUR
+* Jornada partida, 
+* 30 hores setmanals
+* 5 dies a la setmana
+* Classificació del temps fins a l’obertura del sinistre de “Molt lent”
+* Baixa que no és per salut mental 
+* Una valoració inicial de 10000 EUR
+
+
+```{r}
+data <- data.frame(Edad=20, Sexo='M',Estado='S',Dependientes=0,OtrosDepend=0,Salario=300,Jornada='P',HorasSemana=30,DiasSemana=5,Clasificacion='Molt lent',RiesgoSM='0',CosteInicio=log(10000))
+
+pred<-predict(model.logist, data,type ="response")
+pred
+```
+
+Amb les dades que hem esmentat tenim un valor molt proper a 1. Que el cost final sigui superior al inicial és realment és un valor molt clar.
+
+
+# Anàlisi de la variància (ANOVA) de un factor
+
+Anem a fer un estudi per determinar si existeixen variacions en la variable CosteFinal en funció del temps que triga fins l'obertura.
+
+Tenim un estudi d'un factor amb 4 tractaments, un per cada level de Clasificacion.
+
+Podem veure primer gràficament si hi han diferencies entre els grups mitjançant un boxplot:
+
+
+```{r}
+ggplot(data = claimNet, aes(x = Clasificacion, y = CosteFinal.log, color = Clasificacion)) +
+    geom_boxplot() +
+    theme_bw()
+```
+
+En escala logarítmica no sembla que hi hagin moltes diferències entre els grups i podriem dir que ens trobem amb un model força equilibrat en quant a la normalitat i homocedasticitat.
+
+## Hipòtesi nul·la i alternativa
+
+Com he comentat, ens preguntem si la variable Clasificacion, temps transcurregut fins l'opertura del sinistre, és significatiu en el CosteFinal.
+
+Tenim doncs:
+
+H0 - Hipòtesi nul·la: α1 = α2 = α3 = α4 = 0
+H1 - Hipòtesi alternativa: αi != αj per algun i != j
+
+Amb la hipòtesi nul·la acceptem que el factor Clasificacion no és significatiu, en canvi, la H1 implica el contrari. 
+
+
+
+## Model
+
+
+```{r}
+model.logist2<-lm(CosteFinal.log ~ Clasificacion, data=claimNet)
+anova <- anova(model.logist2)
+anova
+```
+
+Veiem que la variable de resposta és CosteFinal en escala logarítmica.
+
+El p-valor és molt més petit que 0.05, per tant acceptem la alternativa en la qual es pot concloure que el factor és significatiu sobre la resposta. El temps en el qual es triga entre que es produeix el sinistre i s'obre l'expedient afecta al CosteFinal.
+
+Podem saber el valor crític de F en el qual es delimita la zona de rebuig o acceptació amb un nivell de significança alfa de 0.05.
+
+Tenim un valor de SSE molt gran, per tant deduïm que el model no ajusta prou bé.
+
+```{r}
+qf(0.05, nlevels(claimNet$Clasificacion) - 1, nrow(claimNet) - 1, lower.tail = F)
+```
+
+
+Valors per sobre de l'estadístic 2.605092 estaran a la zona de rebuig. En el nostre cas tenim un 27.092, molt per sobre.
+
+Tenim una estimació centrada de la variança (MSE) de 2.336 i un MSA de 63.293. Per acceptar la H0 haurien de tenir un valor similar entre MSE i MSA. La divisió ens dona el valor F, si fos al voltant de 1 estariem en la zona d'acceptació. No és el cas.
+
+```{r}
+paste('El valor de F és: ', 63.293 / 2.336)
+```
+
+
+## Efectes dels nivells del factor
+
+Altre dada important és el valor de Sum Sq respecte els Residuals, la eta squared.
+
+```{r}
+190 / (190 + 113707)
+```
+
+En aquest cas, el valor global de la eta-squared ens diu que no hi ha efecte entre les variables. El valor és molt baix.
+
+
+## Contrast dos-a-dos
+
+Com que els factors principals han resultat significatius, farem comparacions per
+parelles per saber quins són els grups que generen les diferencies entre les mitjas de les poblacions. Ho fem amb el test de Tukey que trobem al package agricolae.
+
+```{r}
+hsd <- HSD.test(model.logist2, "Clasificacion", console = TRUE)
+```
+
+
+Tenim un grup homogeni format per els levels Lent i Molt lent. Segurament en aquests casos és quan tenim una afectació en el cost final.
+
+
+Ho veiem visualment. Veiem el grup b que hem comentat i uns altres dos formats per els levels Ràpid i Molt Ràpid.
+
+```{r}
+plot(hsd)
+```
+
+## Adequació del model
+
+Anem a comprovar si el model és adeqüat a partir de la normalitat i homocedasticidad dels residus.
+
+### Normalitat dels residus
+
+Farem diferents proves per veure si els residus tenen una distribució normal.
+
+```{r}
+summary(model.logist2$residuals)
+```
+
+Amb aquests valors, mean al voltant de 0, 1Q-3Q força simètrics i el mateix per Min i Max podem intuir normalitat.
+
+```{r}
+boxplot(model.logist2$residuals)
+hist(model.logist2$residuals)
+```
+
+Gràficament també sembla que tinguem normalitat. Però anem a fer la prova Q-Q plot per a confirmar-ho junt amb test de Shapiro.
+
+```{r}
+qqnorm(model.logist2$residuals) 
+qqline(model.logist2$residuals)
+```
+
+Efectivament els resudis segueixen una distribució normal.
+
+
+### Homocedasticitat dels resudis
+
+
+Anem a comprovar si els residus segueixen igualtat de variancia entre els grups. En l'eix horitzontal tenim els residus i en el vertical els grups. Si tenim homocedasticitat els grups s'estenen de forma longitudinal en el eix y de forma homogenea.  
+
+```{r}
+plot(model.logist2, which=1)
+```
+
+
+Sembla que els grups segueixen homocedasticitat però ho haurem de comprovar amb un test Bartleet.
+
+## Cotrast de normalitat i homocedasticitat
+
+
+Amb el test de Lilliefors (ja que la mostra > 5000 elements) comprovarem la normalitat. La H0 ens diu que els residus segueixen distribució normal, la H1 ho rebutja.
+
+```{r}
+lillie.test(model.logist2$residuals)
+```
+
+Amb un p-valor >> 0.05 no podem rebutjar la H0 (normalitat dels resudis) com ja havíem vist previament.
+
+
+Amb el test de Bartlett comprovarem la homocedasticitat.  
+
+
+```{r}
+bartlett.test(CosteFinal.log~Clasificacion,data=claimNet)
+```
+
+Amb un p-valor < 0.05, rebutjem la hipòtesi nul·la i no acceptem que les variàncies són iguals, tenim heterocedasticitat.
+
+Com a possible sol·lució podem variar la resposta mitjançant una lambda per a obtenir una anova nova on els errors siguin mínims.
+
+```{r}
+boxcox<-boxcox(CosteFinal~Clasificacion,lambda = seq(-1, 1, length = 10),data=claimNet,plotit=T)
+
+lambda<-boxcox$x[which.max(boxcox$y)]
+lambda
+
+gm<-geometric.mean(claimNet$CosteFinal.log)
+gm
+
+claimNet$CosteFinal.boxcox <-(claimNet$CosteFinal.log^lambda-1)/(lambda*gm^(lambda-1))
+
+model.logist3<-lm(CosteFinal.boxcox ~ Clasificacion, data=claimNet)
+anova <- anova(model.logist3)
+anova
+
+```
+
+Nosaltres en un inici hem realitzat una transformació amb logaritme en base n. La transformació que hem obtingut mitjançant boxcox ens ha realitzat un guany en el residus despreciable. Realment no ens ha aportat gaire apart de la part didàctica.
+
+# ANOVA multifactorial
+
+En aquest exercici anem a treballar l'Anova però amb dos factors, Sexo x RiesgoSM i l'efecte sobre CosteFinal.
+
+
+## Anàlisi dels efectes principals i possibles interaccions
+
+Anem a mostrar un gràfic de la variable CosteFinal en escala logarítmica en funció de Sexo i RiengoSM. Hem de poder avaluar si hi ha interacció entre els factors, es a dir, si l'efecte d'un factor afecta l'altre sobre la variant resultant.
+
+
+### Agrupem els conjunts de dades
+
+```{r}
+# seleccionem grups per sexe
+claimNet.Hombres <- subset(claimNet, claimNet$Sexo == 'M')
+claimNet.Mujeres <- subset(claimNet, claimNet$Sexo == 'F')
+```
+
+```{r}
+claimNet.Hombres.RiesgoSM <- subset(claimNet.Hombres, claimNet.Hombres$RiesgoSM == '1')
+claimNet.Hombres.NORiesgoSM <- subset(claimNet.Hombres, claimNet.Hombres$RiesgoSM == '0')
+
+
+claimNet.Mujeres.RiesgoSM <- subset(claimNet.Mujeres, claimNet.Mujeres$RiesgoSM == '1')
+claimNet.Mujeres.NORiesgoSM <- subset(claimNet.Mujeres, claimNet.Mujeres$RiesgoSM == '0')
+```
+
+
+```{r}
+paste('Registres de Hombres amb RiesgoSM:', nrow(claimNet.Hombres.RiesgoSM))
+paste('Registres de Hombres amb sense RiesgoSM:', nrow(claimNet.Hombres.NORiesgoSM))
+
+paste('Registres de Mujeres amb RiesgoSM:', nrow(claimNet.Mujeres.RiesgoSM))
+paste('Registres de Mujeres amb sense RiesgoSM:', nrow(claimNet.Mujeres.NORiesgoSM))
+```
+
+### Mitjana de CosteFinal per cada grup
+
+```{r}
+paste('La mitjana de CosteFinal Hombres amb RiesgoSM:', round(mean(claimNet.Hombres.RiesgoSM$CosteFinal.log), 3))
+paste('La mitjana de CosteFinal Hombres amb sense RiesgoSM:', round(mean(claimNet.Hombres.NORiesgoSM$CosteFinal.log), 3))
+
+paste('La mitjana de CosteFinal Mujeres amb RiesgoSM:', round(mean(claimNet.Mujeres.RiesgoSM$CosteFinal.log), 3))
+paste('La mitjana de CosteFinal Mujeres amb sense RiesgoSM:', round(mean(claimNet.Mujeres.NORiesgoSM$CosteFinal.log), 3))
+```
+
+### Gràfic de CosteFinal en escala logarítmica en funció de cada factor
+
+```{r}
+interaction.plot(claimNet$Sexo, claimNet$RiesgoSM, claimNet$CosteFinal.log)
+```
+
+#### Interpreteu el resultat
+
+Veiem que el cost final és menor en els homes respecte les dones tant amb risc o no de malaltia mental. El que és molt clar, és que amb risc de malatia mental el cost final és superrior. Les rectes són pràcticament paral·leles, per tant *no hi ha interacció entre els factors sexe i risc de malaltia mental i només tenim efectes principals*.
+ 
+
+## Càlcul del model
+
+Anem a realitzar l'ajust del model mitjançant Anova amb els dos fators amb interacció.
+
+```{r}
+twofactors.model <- aov(CosteFinal.log ~ Sexo*RiesgoSM, data = claimNet)
+twofactors.model.anova <- anova(twofactors.model)
+twofactors.model.anova
+```
+
+Veiem que el factor Sexo i RiesgoSM són significatives. Ambdues tenen una F > 1 i el p-valor és inferior a 0.05. En canvi, la combinació de Sexo x RiesgoSM no és significativa tal i com havíem previst en les gràfiques.
+
+
+
+### Efecte dels factors sobre la variabilitat explicada del Cost final
+
+La variabilitat explicada del cost final té aquesta notació:
+
+SST = SSA + SSB + SSAB + SSE
+
+on la total és la suma de la variabilitat de A + B + AB + errors.
+
+En el nostre model:
+
+```{r}
+paste("SSA - La variabilitat explicada de A és:", twofactors.model.anova$`Sum Sq`[1] )
+paste("SSB - La variabilitat explicada de B és:", twofactors.model.anova$`Sum Sq`[2] )
+paste("SSAB - La variabilitat explicada de AB és:", twofactors.model.anova$`Sum Sq`[3] )
+paste("SSE - La variabilitat explicada de AB és:", twofactors.model.anova$`Sum Sq`[3] )
+```
+
+Veiem que dels dos factors, Sexo és el que aporta més al model. També é significatiu el valor de RiesgoSM com venint dient. En canvi, la interacció és irrellevant. El valors dels errors és molt alt per tant el model sembla que no ajusta bé.
+
+### Analitzeu dos-a-dos les diferències de mitjanes entre els diferents factors
+
+Les mitjanes per nivells i per condicions experimentals són:
+
+```{r}
+model.tables(twofactors.model, type = "mean")
+```
+
+Comparant les mitjanes podem deduir que les dones tenen un CostFinal superior als homes. També és veu prou evident que el CosteFinal quan tenim risc de malaltia és superior. 
+
+En canvi, en la interacció aquesta valors es mantenen contants en quant al sexe. Els homes amb RiesgoSM tenen la mateixa mitja que les dones, mitja de 8. I passa el mateix sense RiesgoSM, tenen homes i dones mitja de 10
+
+
+### Adequació del model
+
+#### Normalitat
+
+Mostrarem el plot Q-Q i posteriorment un test de Lilliefors
+
+```{r}
+boxplot(twofactors.model$residuals)
+hist(twofactors.model$residuals)
+```
+
+
+Tant amb l'histograma com amb el boxplot podem intuïr normalitat en els residus del model.
+
+
+```{r}
+qqnorm(twofactors.model$residuals) 
+qqline(twofactors.model$residuals)
+```
+
+
+La prova de normalitat de Q-Q plot ens ho confirma visualment però ara farem un test per a concloure el que ja sabem.
+
+
+```{r}
+lillie.test(twofactors.model$residuals)
+```
+
+Amb valor per sobre de 0.05 podem dir que les dades segueixen una distribució normal.
+
+
+#### Homoscedasticitat
+
+Fem un gràfic de residus vs. valors ajustat.
+
+```{r}
+plot(twofactors.model, which = 1)
+```
+
+Observem quate líneas verticals de punts que estan situades en les mitjanes de cada grup que  corresponen als valors ajustats de les observacions. La disposició dels residus mostra una dispersió no molt semblant. Sembla que tenim heterocedasticitat.
+
+```{r}
+condition <- with(claimNet, interaction(RiesgoSM, Sexo))
+bartlett.test(CosteFinal.log ~ condition, data = claimNet)
+```
+
+
+Amb un p-valor < 0.05, rebutjem la hipòtesi nul·la i no acceptem que les variàncies són iguals com ha ens havia semblat en el plot.
+
+
+## Interpretació dels resultats
+
+Hem determinat amb les proves que tant RiesgoSM com Sexo són factors significatius en la resposta de CosteFinal. En canvi, la interacció no ho és.
+
+El model no ajusta molt bé, el motiu pot venir donat perquè tenim heterocedasticitat en els residus. Uns posible sol·lució seria variar la respost per a obtenir una anova on els errors siguin mínims.
+
+
+# Conclusions
+
+## Estudi 
+
+Durant l'exercici hem realitzat un estudi per determinar com impacten algunes variables sobre el cost final de les indemnitzacions per baixa laboral atorgades per una companyia d’assegurançes.
+
+## Preparació de les dades
+
+Excepte alguna transformació, no hem realitzat gaires canvis. Hem canviat els noms, transformació de classes, hem creat les variables Tiempo, Clasificacion i RiesgoSM i finalment hem eliminat els valors absents.
+
+En els analisis visuals que hem fet tenim un augment en el RiesgoSM dels homes respecte les dones, si estan casats respecte els solters i sobretot si tenen una malaltia mental.
+
+En aquest apartat hem vist que la variable CostFinal segueix una distribució lognormal.
+
+## Estadística inferencial
+
+Hem alculat un interval de confiança de la variable CosteFinal. Hem conclós que la mitjana de CosteFinal amb un nivell de confiança de 95% és troba entre els valors 9281.64 i 10127.52.
+
+En el cotrast d'hipòtesi per saber si les dones perceben el mateix que els homes més 1000, hem conclós que efectivament és així.
+
+## Model regressió lineal
+
+En el model de regressió lineal hem obtingut un model que no ajusta molt bé. Els residus no segueixen una distribució normal. 
+
+## Model regressió logística
+
+En el model logístic les variables significatives han estat sobretot, Edad, Sexo, Estado, Dependientes, Salario, Jornada, DiasSemana i log(CosteInicio). Després amb els OR, per exemple la variable Salario no ho era pas.
+
+El model ens prediu molt millor els casos en els quals el preu final és superior al inicial.
+
+## Anova
+
+Amb anova hem conclós que el factor Clasificacion és significatiu, es a dir, el temps que passa des de que és produeix el sinistre fins que s'obre el expedient influeix en el cost final.
+
+De totes formes el model té les seves limitacions i no ajusta molt bé, segurament perquè tenim heterocedasticitat en els residus.
+
+Amb dos factors, hem comprovat si impactan en el cost final el sexe i el fet de tenir malaltia mental. En els dos casos hem vist que sí. En canvi, la combinació dels dos factors no afecta al resultat.

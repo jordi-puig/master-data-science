@@ -1,0 +1,1258 @@
+---
+title: "Mineria de dades: PRA1 - Selecció i preparació d'un joc de dades"
+author: "Autor: Jordi Puig Ovejero"
+date: "Abril 2020"
+output:
+  html_document:
+    highlight: default
+    number_sections: yes
+    theme: cosmo
+    toc: yes
+    toc_depth: 2
+    includes:
+      in_header: 05.584-PRA-header.html
+  word_document: default
+  pdf_document:
+    highlight: zenburn
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Carrega de les llibreries que es necessiten
+```{r message= FALSE, warning=FALSE}
+library(ggpubr)
+library(ggplot2)
+library(arules)
+library(dplyr)
+library(factoextra)
+library(FactoMineR)
+```
+
+******
+# Introducció
+******
+Aquesta pràctica cobreix de forma transversal l'assignatura.
+
+Les Pràctiques 1 i 2 de l'assignatura es plantegen d'una forma conjunta de forma que la Pràctica 2 serà continuació de la 1.
+
+Per aquesta primera pràctica el que farem és el següent:
+
+1. Seleccionar un joc de dades i justificar la seva elecció. El joc de dades haurà de tenir capacitats perquè se li puguin aplicar algoritmes supervisats, algoritmes no supervisats i regles d'associació. Si el joc de dades no suporta els tres models, es poden triar diversos conjunts de dades, derivar dades noves o fusionar-los amb d'altres.
+
+2. Realitzar una anàlisi exploratòria del joc de dades seleccionat.
+
+3. Realitzar les tasques de neteja i condicionat necessàries per poder ser usat en processos de creació de models de mineria posteriors.
+
+4. Realitzar mètodes de discretització
+
+5. Aplicar un estudi PCA sobre el joc de dades. Tot i no estar explicat en el material didàctic, es valorarà si en lloc de PCA investigueu pel vostre compte i apliqueu SVD (Single Value Decomposition).
+
+
+******
+# Elecció dels jocs de dades
+******
+Per a realitzar les dues pràctiques he pensat agafar dos jocs de dades. Em portarà una mica més de feina però ho he trobat adient. D'aquesta forma puc practicar amb diverses tipologies de datasets.
+
+Nota: **Segurament a cada un dels jocs de dades apliqui més d'un tipus d'algoritme**. 
+
+******
+# Classificació
+******
+
+## Joc de dades
+Per a realitzar un estudi amb l'algoritme de classificació he agafat un dataset de [marqueting bancari](https://archive.ics.uci.edu/ml/datasets/Bank+Marketing).
+
+Les dades estan relacionades amb campanyes de màrqueting directe d’una institució bancària portuguesa. Aquestes campanyes, basades en trucades de telèfon, buscaven clients que contractessin un dipòsit a termini. Sovint, es requeria més d’una trucada amb el mateix client per a concretar la transacció.
+
+L’objectiu de la classificació és predir si el client subscriurà ("yes"/"no") un dipòsit a termini (variable "y") a partir d'una sèrie de dades del client (age, job, marital, education...). Si tenim una bona segmentació dels clients i fem una bona predicció el banc pot fer campanyes molt dirigides a obtenir resultats positius.
+
+Durant l'exercici direm que un usuari ha convertit, és a dir, tenim una conversió, si y = 'yes'. En cas contrari, direm que no ha convertit. El concepte **conversió** sortirà durant tot l'exercici.
+
+Intentaré també en la pràctica 2 aplicar associació, buscant regles que ens donin com a resultat un target "yes", "no":  (lhs => rhs, on rhs és "yes" or "no"). Clustering també podríem aplicar generant un model a partir de les dades dels client i trobant grups de clients.  
+
+**Hi ha quatre conjunts de dades:**
+
+1. bank-adicional-full.csv amb tots els exemples (41188) i 20 atributs, ordenats per data (05/2008 - 11/2010)
+2. bank-adicional.csv amb un 10% dels exemples (4119), seleccionats aleatòriament del 1) i 20 atributs
+3. bank-full.csv amb tots els exemples (45211) i 17 entrades, ordenats per data (versió anterior d’aquest conjunt de dades amb menys entrades).
+4. bank.csv amb un 10% dels exemples (4521) i 17 entrades, seleccionades aleatòriament entre 3 (versió anterior d’aquest conjunt de dades amb menys entrades).
+
+Els conjunts de dades més petits es proporcionen per provar algoritmes d’aprenentatge automàtic més exigents computacionalment. 
+
+Si no requereix per tema de rendiment, **farem servir el bank-full.csv**:
+
+* Nombre d'instancies: 45211
+* Nombre d'instancies: 16 + atribut de sortida (total 17)
+* No hi ha missing values: cap (substituït per 'unknown')
+
+## Anàlisi exploratori
+
+Carreguem les dades i fem un summary general (després el farem per parts). Els elements categòrics estan carregats com a *factor* des d'un inici. Per les variables categòriques prefereixo treballar com a factor que com character. Ens facilita les coses per ordenació o per veure les diferents categories que hi ha.
+
+```{r message= FALSE, warning=FALSE}
+bank <- read.csv('data/bank/bank-full.csv',stringsAsFactors = TRUE, sep = ';')
+attach(bank) # ens permet referenciar les columnes de bank sense haver de especificar el dataset.
+summary(bank)
+```
+
+### Definició dels atributs
+
+#### Variables d'entrada
+
+**Dades del client:**
+
+* 1 - age (numeric)
+* 2 - job : tipus de feina (categorical): 'admin.','unknown','unemployed','management','housemaid','entrepreneur','student','blue-collar','self-employed','retired','technician','services')
+* 3 - marital : estat civil (categorical: 'divorced','married','single'; note: 'divorced' means divorced or widowed)
+* 4 - education (categorical: 'primary','seconday','tertiary','unknown')
+* 5 - default: té crèdit per defecte? (categorical: 'no','yes')
+* 6 - balance: mitja de saldo anual, en euros (numeric) 
+* 7 - housing: té préstec d'habitatge? (categorical: 'no','yes')
+* 8 - loan: té préstec personal? (categorical: 'no','yes')
+
+**Atributs relacionats amb el darrer contacte de la campanya actual:**
+
+* 9 - contact: com ha estat la comunicació (categorical: 'cellular','telephone','unknown')
+* 10 - month: darrer contacte, mes de l'any (categorical: 'jan', 'feb', 'mar', ..., 'nov', 'dec')
+* 11 - day: darrer contacte, dia del més (numeric)
+* 12 - duration: darrer contacte, en segons (numeric). Nota important: aquest atribut afecta molt el resultat de sortida (per exemple, si duration = 0 llavors y = 'no'). Tanmateix, no es coneix la durada abans de realitzar una trucada. Després del final de la trucada, se sap òbviament. Així, aquesta entrada només s’hauria d’incloure amb finalitats de benchmark i s’hauria de descartar si la intenció és obtenir un model predictiu realista.
+
+**Altres atributs:**
+
+* 13 - campaign: nombre de contactes realitzats durant aquesta campanya i per a aquest client (numeric, inclou el darrer contacte)
+* 14 - pdays: nombre de dies que han passat des de el darrer contacte d'una campanya anterior (numeric; -1 significa que no ha estat contactat previament)
+* 15 - previous: nombre de contactes realitzats abans d'aquesta campanya i per a aquest client (numeric)
+* 16 - poutcome: resultat de la campanya de màrqueting anterior (categorical: 'unknown','other','failure','success')
+
+#### Variable de sortida (objectiu desitjat, ens indica si el registre ha convertit o no)
+
+* 17 - y - El client ha subscrit el dipòsit a termini? (binary: 'yes','no')
+
+### Analisi de les dades dels clients
+
+Com que les dades de la mostra estan ben separades farem l'analisi per parts. 
+Primer realitzem un estudi de les dades dels clients.
+
+```{r message= FALSE, warning=FALSE}
+bank.clients <- bank[,1:8]
+head(bank.clients)
+```
+
+```{r message= FALSE, warning=FALSE}
+summary(bank.clients)
+```
+
+Amb aquesta informació podem dir que: 
+
+* La mitja d'edat està quasi en els 41 anys i el 3Q en els 48. Per tant intueixo que gran part de la mostra està en una franja d'edat relativament jove.
+* Tenim valors 'unknown' a education però no sembla molt significatiu el nombre.
+* A balance veiem possibles valors atípics (outliers).
+
+
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(bank.clients))
+```
+
+No tenim valors nulls però hi ha 'unknown' en alguns atributs categòrics que potser posteriorment tractarem.
+
+Anem a visualitzar dades de la mostra. Veurem distribucions, possibles valors atípics i relació amb la variable de sortida 'y':
+ 
+#### Estudi de l'atribut de sortida 'y':
+
+```{r message= FALSE, warning=FALSE}
+# primer afegim la columna de conversió 'y'
+bank.clients.y <- cbind(bank.clients, y=bank[,17])
+ggplot(data=bank.clients.y,aes(x=y,fill=y))+geom_bar()
+
+table(bank.clients.y$y)
+cat("La taxa de conversió del total de la mostra és de:", round(100*(5289)/(5289 + 39922), 2), "%")
+```
+
+Un cop fet l'estudi si orientéssim les trucades a partir del resultat, podríem fer augmentar aquesta conversió.
+
+Com anem a executar molts cops algunes sentències, crearem funcions i executarem.
+```{r}
+
+# genera taula amb grups
+groups <- function (data, column) {
+  ret <- data %>%  group_by(data[,column]) %>% summarise (n = n()) %>% mutate(freq = signif(n / sum(n) * 100, 3))
+  ret <- setNames(ret, c(column, "counts", "freq"))
+  return (ret)
+}
+
+# mostra distribució i conversió
+customPlot <- function(df, .x_var, .y_var) {
+  # convert strings to variable
+  x_var <- sym(.x_var)
+  y_var <- sym(.y_var)
+
+  groups <- groups(df, .x_var)
+
+  print(ggplot(data=df,aes(x= !! x_var, fill = !! y_var)) + geom_bar(position="fill") + ylab("Frequency") )
+  print(ggplot(groups, aes(x = !! x_var, y = counts, fill=!! x_var)) + geom_bar(stat = "identity"))
+  
+
+}
+
+# retorna distribució
+customPlotDist <- function(df, .x_var, .y_var) {
+  # convert strings to variable
+  x_var <- sym(.x_var)
+
+  groups <- groups(df, .x_var)
+
+  return (ggplot(groups, aes(x = !! x_var, y = counts, fill=!! x_var)) + geom_bar(stat = "identity") +  geom_text(size=3, aes(label = counts), vjust = -0.3) + geom_text(size=3, aes(label = paste(freq, "%")), vjust = 2))
+}
+
+# retorna conversió de 'y' normalitzada
+customPlotNorm <- function(df, .x_var, .y_var) {
+  x_var <- sym(.x_var)
+  y_var <- sym(.y_var)
+  return (ggplot(data=df,aes(x= !! x_var, fill = !! y_var)) + geom_bar(position="fill") + ylab("Frequency") ) 
+}
+
+```
+
+#### Estudi de l'atribut 'age':
+```{r message= FALSE, warning=FALSE}
+customPlot(bank.clients.y,'age', 'y') 
+```
+
+La primera gràfica ens mostra la conversió en funció de l'edat. En una primera visualització veiem força clarament que en una franja d'edat la conversió és similar i en els extrems millora. Podria ser que en els extrems augmenti perquè no tenim prou mostra o bé que hi hagi una franja entre els 60 i els 75 anys que ens podria dir que en aquesta la conversió és millor. 
+
+També podem intuir que tenim possibles outliers.
+
+
+#### Estudi de l'atribut 'job':
+
+```{r message= FALSE, warning=FALSE}
+with(customPlotDist(bank.clients.y,'job', 'y')  + ggpubr::rotate_x_text(),
+customPlotNorm(bank.clients.y,'job', 'y') + ggpubr::rotate_x_text())
+```
+
+Aquí sí que podem veure per ordre de millor conversió:
+* els 'student' i els 'retired'
+* els unemployed i management  
+* els self-employed, technician i admin
+* la resta
+tenen una tendència a contractar més que no pas els altres jobs, 
+
+En canvi, blue-collar serien el pitjor target.
+
+
+#### Estudi de l'atribut 'marital':
+```{r message= FALSE, warning=FALSE}
+customPlotDist(bank.clients.y,'marital', 'y')  
+customPlotNorm(bank.clients.y,'marital', 'y') 
+```
+
+Sembla que els single converteixen una mica millor, després divorced i finalment married.
+
+
+#### Estudi de l'atribut 'education':
+```{r message= FALSE, warning=FALSE}
+customPlotDist(bank.clients.y,'education', 'y')  
+customPlotNorm(bank.clients.y,'education', 'y') 
+```
+
+En el cas de education primer atacaríem als tertiary, secondary i finalment primary. Els unknown si els tractem com una categoria més també són una bona elecció.
+
+#### Estudi de l'atribut 'default':
+```{r message= FALSE, warning=FALSE}
+customPlotDist(bank.clients.y,'default', 'y')  
+customPlotNorm(bank.clients.y,'default', 'y') 
+```
+
+Aquesta dada no ens aporta molt. Tenim pocs registes que son = 'yes'. De totes maneres sembla que converteix millor el 'no'. Registre candidat a ser eliminat segurament, ja que no tenim una mostra diferenciada i la conversió és similar. Ho veurem amb l'estudi PCA segurament.
+
+#### Estudi dels atributs 'housing' i 'loan':
+```{r message= FALSE, warning=FALSE}
+
+customPlotDist(bank.clients.y,'housing', 'y')  
+customPlotNorm(bank.clients.y,'housing', 'y') 
+
+
+customPlotDist(bank.clients.y,'loan', 'y')  
+customPlotNorm(bank.clients.y,'loan', 'y') 
+
+```
+
+En quant a housing converteix força millor si no tenen préstec d'habitatge i també converteixen millor si no tenen préstec personal.
+
+Resum:
+
+* Amb les dades observades veig un possible target per fer una campanya per obtenir préstecs segmentant els atributs de age, jobs, marital, education, loan i housing.
+
+* L'atribut default potser el podríem treure ja que no ens aporta gaire valor. La majoria són 'no'.
+
+
+#### Generem comparatives amb 2 variables (job i marital) més la sortida 'y'
+```{r message= FALSE, warning=FALSE}
+# eliminem unknown's 
+subset <- subset(bank.clients.y, job != "unknown")
+ggplot(data = subset,aes(x=job,fill=y)) + geom_bar(position="fill") + facet_wrap(~marital)+ coord_flip()  + geom_hline(yintercept=0.15, linetype="dashed",  color = "red", size=0.5)
+
+```
+
+Trobem altre possible informació. Bones combinacions amb:
+
+ * unemployed, sempre però sobretot amb single  
+ * student, sempre però sobretot amb single 
+ * self-employed amb divorced i single
+ * retired amb divorced i married sobretot
+ * management amb single
+ * housemaid amb single
+
+Com a mala opció:
+
+ * blue-collar en general
+ * entrepreneur en general
+ * services, self-employed, housemaid amb married 
+
+ 
+
+#### Generem comparatives amb 2 variables (job i education) més la sortida 'y'
+```{r message= FALSE, warning=FALSE}
+# eliminem unknown's 
+subset <-subset(bank.clients.y, education != "unknown")
+subset <- subset(subset, job != "unknown")
+ggplot(data = subset,aes(x=job,fill=y)) + geom_bar(position="fill") + facet_wrap(~education)+ coord_flip()+ geom_hline(yintercept=0.15, linetype="dashed",  color = "red", size=0.5)
+
+```
+
+Veiem clarament que tertiary és el millor grup de education.
+
+### Anàlisi de les dades del darrer contacte de la campanya actual
+```{r message= FALSE, warning=FALSE}
+bank.lastcontact <- bank[,9:12]
+bank.lastcontact.y <- cbind(bank.lastcontact, y=bank[,17])
+head(bank.lastcontact.y)
+```
+
+```{r message= FALSE, warning=FALSE}
+summary(bank.lastcontact)
+```
+
+En una primera observació deduïm:
+
+* Tenim molts valors unkwown en el registre contact. Per tant, no els esborrarem i farem servir com una categoria més.
+* Al mes de maig és on tenim més mostra
+* La mitja de la duració de la trucada és d'uns 3 minuts. 1Q = 1.6 minuts aprox. i 3Q = 5.3. Tenim alguns valors atípics amb una trucada de 82 minuts.
+
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(bank.lastcontact))
+```
+
+En les dades de darrer contacte tampoc hi ha valors null, però si molts unknown a l'atribut contact. 
+
+
+
+Visualitzem les dades i taxa de conversió per cada un dels atributs.
+
+#### Estudi de l'atribut 'contact':
+```{r message= FALSE, warning=FALSE}
+customPlotDist(bank.lastcontact.y,'contact', 'y')  
+customPlotNorm(bank.lastcontact.y,'contact', 'y') 
+```
+
+A contact tenim molts 'unknown' o la conversió és dolenta. Entre cellular i telephone no hi ha molta diferència.
+
+#### Estudi de l'atribut 'day':
+```{r message= FALSE, warning=FALSE}
+customPlotDist(bank.lastcontact.y,'day', 'y')  
+customPlotNorm(bank.lastcontact.y,'day', 'y') 
+```
+
+El dia del mes no ens diu gaire. Hagués estar millor tenir el dia de la setmana, crec que es més rellevant.
+
+#### Estudi de l'atribut 'month':
+```{r message= FALSE, warning=FALSE}
+customPlotDist(bank.lastcontact.y,'month', 'y')  
+customPlotNorm(bank.lastcontact.y,'month', 'y') 
+```
+
+Sí que sembla que hi ha uns mesos millors que altres però curiosament coincideix amb els que tenim més mostra. Potser com hi havia menys trucades, podien estar més temps a la trucada i per això la conversió és molt millor.
+
+#### Estudi de l'atribut 'duration':
+```{r message= FALSE, warning=FALSE}
+customPlotNorm(bank.lastcontact.y,'duration', 'y') 
+duration.groups <- bank.lastcontact.y %>% group_by(duration) %>% summarise(counts = n())
+ggplot(duration.groups, aes(x = duration, y = counts)) + geom_bar(fill = "#0073C2FF", stat = "identity")  + theme_pubclean()
+ggplot(data=bank.lastcontact.y,aes(x=duration,fill=y)) + geom_bar(position="fill") + ylab("Frequency") + scale_x_continuous(limits = c(0, 1000))
+```
+
+Com més dura la trucada més posibilitats de contractar. A la primera gràfica es veu clarament que tenim valors molt atípics i no es pot apreciar bé la distribució. **Hem tallat a 1000 segons perquè per sobre no tenen sentit on la mostra és molt petita. En les tasques de neteja treure'm valors atípics**
+
+#### Conclusions de les dades del darrer contacte:
+Contact, duration i month ens serveixen per a poder orientar la conversió al "yes":
+
+* No hi ha molta diferència entre telephone i cellular.
+* Tenim uns mesos millor que altres. Millor *mar, apr, sep, oct, dec* que *may, jun, jul, aug, nov*. Segurament serà per estacionalitat o perquè en els millors mesos el volum és més baix i les trucades més llargues.
+* Del dia del mes no podem induir gaire cosa. Si que hi ha dies millors però respecte a 12 mesos es complicat.
+* Duration: com més dura la trucada millor. Sembla important mantenir l'usuari al telèfon.
+
+### Altres dades:
+```{r message= FALSE, warning=FALSE}
+bank.other <- bank[,13:16]
+bank.other.y <- cbind(bank.other, y=bank[,17])
+head(bank.other.y)
+```
+
+```{r message= FALSE, warning=FALSE}
+summary(bank.other)
+```
+
+* campaign: sembla tenir outliers ja que el 3Q està a 3 i tenim un 63.
+* previous: el mateix passar amb previous
+* poutcome: té molts valors unknown que no esborrare per no reduïr tant la mostra i ens serviran com a altre categoria
+
+
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(bank.other))
+```
+
+
+Visualitzem les dades i taxa de conversió per cada un dels atributs.
+
+#### Estudi de l'atribut 'campaign':
+```{r message= FALSE, warning=FALSE}
+
+campaign.groups <- bank.other.y %>% group_by(campaign) %>% summarise(counts = n())
+ggplot(campaign.groups, aes(x = campaign, y = counts)) + geom_bar(fill = "#0073C2FF", stat = "identity")  + theme_pubclean()
+
+ggplot(data=bank.other.y,aes(x=campaign,fill=y)) + geom_bar(position="fill") + ylab("Frequency")+ scale_x_continuous(limits = c(0, 20))
+```
+
+A partir de X trucades, potser ja no caldria trucar més perquè la probabilitat de conversió va caient.
+Recordem que aquest valor és el nombre de trucades en aquesta campanya.
+
+#### Estudi de l'atribut pdays:
+```{r message= FALSE, warning=FALSE}
+pdays.groups <- bank.other.y %>% group_by(pdays) %>% summarise(counts = n())
+ggplot(pdays.groups, aes(x = pdays, y = counts)) + geom_bar(fill = "#0073C2FF", stat = "identity")  + theme_pubclean() + scale_x_continuous(limits = c(0, 100))
+
+ggplot(data=bank.other.y,aes(x=pdays,fill=y)) + geom_bar(position="fill") + ylab("Frequency") + scale_x_continuous(limits = c(0, 100))
+```
+
+Els dies des de la darrera trucada de la campanya anterior no ens dóna molta informació o difícil de treure una conclusió. 
+
+#### Estudi de l'atribut previous:
+```{r message= FALSE, warning=FALSE}
+previous.groups <- bank.other.y %>% group_by(previous) %>% summarise(counts = n())
+ggplot(previous.groups, aes(x = previous, y = counts)) + geom_bar(fill = "#0073C2FF", stat = "identity")  + theme_pubclean()+ scale_x_continuous(limits = c(0, 10))
+
+ggplot(data=bank.other.y,aes(x=previous,fill=y)) + geom_bar(position="fill") + ylab("Frequency") + scale_x_continuous(limits = c(0, 10))
+```
+
+El nombre de trucades prèvies a aquesta campanya tampoc sembla molt rellevant
+
+#### Estudi de l'atribut poutcome:
+```{r message= FALSE, warning=FALSE}
+poutcome.groups <- bank.other.y %>% group_by(poutcome) %>% summarise(counts = n())
+ggplot(poutcome.groups, aes(x = poutcome, y = counts)) + geom_bar(fill = "#0073C2FF", stat = "identity")  + theme_pubclean()
+
+ggplot(data=bank.other.y,aes(x=poutcome,fill=y)) + geom_bar(position="fill") + ylab("Frequency") 
+```
+
+
+Clarament si van contractar prèviament, sembla que repeteixen. Aquesta dada és un molt bon target.
+
+
+* Amb aquest estudi visual ens hem fet la idea que converteix o afecta més i les distribucions, però a la pràctica 2: 
+
+1. Amb l'estudi de classificació podrem predir si un nou registre amb unes dades convertirà o no. Introduïm unes dades d'un usuari exemple i hem de veure si és un "yes" o "no" en la variable "y".
+
+2. Aplicarem regles d'associació per veure quins atributs combinats donen -> y = 'yes' o y = 'no'
+
+3. Si apliquem clustering podrem veure tipologia de clients.
+
+## Tasques de neteja
+
+### Camps null (missing values)
+
+Com hem comentat ja durant tot l'exercici, la mostra no té valors nulls com a tals. 
+
+```{r message= FALSE, warning=FALSE}
+colSums(is.na(bank))
+```
+
+El que sí que té en els elements categòrics són camps 'unknown'. 
+
+Tenim 3 opcions per aquests valors:
+
+1. Eliminar els registres
+2. Assignar per un valor estimat
+3. **No fer res i tractar-los com a una categoria.** És l'opció que prefereixo.
+
+Optarem per la solució 3 per aquests motius: 
+
+* Els valors 'unknown' poden representar per si mateix una categoria única.
+* Pot haver-hi una diferència important de dades si eliminem els 'unknown'
+* Tot el que ha causat el camp 'unknown' pot estar relacionat amb el resultat.
+
+De totes maneres anem a estudiar aquests elements i generarem un dataset diferent:
+
+```{r message= FALSE, warning=FALSE}
+#creem el dataset per les dades netejades
+bank.clean <- bank
+```
+
+Anem a comprovar els percentatges de unknown
+```{r message= FALSE, warning=FALSE}
+# valors 'unknown' de job
+{
+print("Job")
+print(prop.table(table(bank$job)), 2)
+}
+
+# valors 'unknown' de education
+{
+cat('\n')
+print('Education:')
+print(prop.table(table(bank$education)), 2)
+}
+
+# valors 'unknown' de contact
+{
+cat('\n')
+print('Contact:')
+print(prop.table(table(bank$contact)), 2)
+}
+
+# valors 'unknown' de poutcome
+{
+cat('\n')  
+print('Poutcome:')
+print(prop.table(table(bank$poutcome)), 2)
+}
+```
+
+Com podem observar podem eliminar els 'unknown' de job i education perquè la proporció és petita, en canvi, amb contact i poutcome podríem fer una assignació estimada, ja que tenim quasi un 30% en contact i més d'un 80% en poutcome.
+
+```{r message= FALSE, warning=FALSE}
+# eliminem els unknown de job i de education
+total.rows <- nrow(bank.clean);
+bank.clean <-subset(bank.clean, education != "unknown")
+bank.clean <- subset(bank.clean, job != "unknown")
+
+# eliminem categories buides
+bank.clean <- droplevels(bank.clean)
+
+rows <- nrow(bank.clean);
+(rows / total.rows) * 100
+```
+
+Eliminant els unknown de education i job encara tindríem més del 95.5% de la mostra. 
+
+### Valors atípics extrems (outliers)
+Ara anem a veure els valors atípics. Per a trobar valors extrems anem a aplicar la idea dels IQR (interquartile ranges):
+* [referència1:](http://www.mathwords.com/o/outlier.htm)
+* [referència2:](http://r-statistics.co/Outlier-Treatment-With-R.html)
+
+Per a una determinada variable contínua, els outliers són aquelles observacions que es troben fora de 1.5 * IQR, on IQR, el "Inter Quartile Range" és la diferència entre el Q3 i el Q1:
+
+
+* Interquartile range, IQR = Q3 - Q1
+* lower = Q1 - 1.5 * IQR 
+* Upper = Q3 + 1.5 * IQR
+
+### Funció per treure els límits dels valors atípics
+```{r message= FALSE, warning=FALSE}
+outliersLimits <- function(x) {
+    limits <- c("above", "under")
+    limits$above <- quantile(x, 0.75, type=6) + 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+    limits$under <- quantile(x, 0.25, type=6) - 1.5 * (quantile(x, 0.75, type=6) - quantile(x, 0.25, type=6))
+  return(limits)
+}
+```
+
+### Valors atípics a age
+```{r message= FALSE, warning=FALSE}
+ggplot(data = bank.clean ,aes(x=y,y=age))+geom_boxplot()
+
+# podem veure els límits de age
+limits <- outliersLimits(bank.clean$age)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+bank.clean <-subset(bank.clean, age >= limits$under)
+bank.clean <-subset(bank.clean, age <= limits$above)
+
+ggplot(data = bank.clean,aes(x=y,y=age))+geom_boxplot()
+
+total.rows <- nrow(bank.clean);
+rows <- nrow(bank.clean)
+(rows / total.rows) * 100
+```
+
+Amb boxplot podem preveure alguns valors d'edat que tenen molt poca mostra i no ens donarien molta informació.
+
+
+### El mateix per a balance
+```{r message= FALSE, warning=FALSE}
+ggplot(data = bank.clean ,aes(x=y,y=balance))+geom_boxplot()
+
+total.rows <- nrow(bank.clean);
+
+# podem veure els límits de balance
+limits <- outliersLimits(bank.clean$balance)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+bank.clean <-subset(bank.clean, balance >= limits$under)
+bank.clean <-subset(bank.clean, balance <= limits$above)
+
+ggplot(data = bank.clean,aes(x=y,y=balance))+geom_boxplot()
+
+rows <- nrow(bank.clean)
+(rows / total.rows) * 100
+```
+
+Les mostres queden molt més compactades eliminant aquests valors extrems.
+
+```{r message= FALSE, warning=FALSE}
+total.rows <- nrow(bank);
+rows <- nrow(bank.clean);
+(rows / total.rows) * 100
+```
+
+Finalment hem calculat el quin percentatge de la mostra hem eliminat amb els valors atípics i el 'unkwown' i ens ha quedat un 84.61% del total.
+
+Treballarem amb els dos models per a comparar-los:
+1. bank (original)
+2. bank.clean (hem tret alguns unknown i valors atípics)
+
+## Discretització
+
+Anem a discretitzar algunes variables continues que ens serviran per a reduir el factor de ramificació quan realitzem la classificació amb els arbres de decisió.
+
+### Discretització de la variable age
+
+```{r message= FALSE, warning=FALSE}
+# creem els dos datasets amb l'original i el clean (sense 'unknown' i 'outliers')
+bank.discret <- bank
+bank.clean.discret <- bank.clean
+```
+
+```{r message= FALSE, warning=FALSE}
+# dicretitzem el dataset bank
+age.discret <- discretize(bank$age, breaks = 5, labels=FALSE)
+bank.discret$age <- age.discret
+
+
+## observem com queda la distribució i comparem amb la conversió
+ggplot(data=bank.discret,aes(x=age.discret,fill=y)) + geom_bar(position="fill") + ylab("Frequency")
+ggplot(bank.discret, aes(age.discret)) + geom_bar(fill = "#0073C2FF")
+
+# dicretitzem el dataset bank.clean 
+bank.clean.discret$age <- discretize(bank.clean$age, breaks = 5, labels=FALSE)
+
+```
+
+
+### Discretització de la variable duration
+
+```{r message= FALSE, warning=FALSE}
+# dicretitzem el dataset bank
+duration.discret <- discretize(bank$duration, breaks = 5, labels=FALSE)
+bank.discret$duration <- duration.discret
+
+## observem com queda la distribució i comparem amb la conversió
+ggplot(data=bank.discret,aes(x=duration.discret,fill=y)) + geom_bar(position="fill") + ylab("Frequency")
+ggplot(bank.discret, aes(duration.discret)) + geom_bar(fill = "#0073C2FF")
+
+
+# dicretitzem el dataset bank.clean
+bank.clean.discret$duration <- discretize(bank.clean$duration, breaks = 5, labels=FALSE)
+```
+
+Finalment ens han quedat 2 datasets:
+
+* bank.discret: on només hem aplicat discretització en dues variables
+* bank.clean.discret: on hem aplicat discretització, eliminat outliers i alguns 'unknown', concretament aquells que no tenien molta proporció.
+
+
+## Estudi PCA (Principal Component Analysis)
+
+En l'estudi de PCA el que es vol es trobar un nombre de dimensions menor de la mostra que expliquin el mateix que la mostra total. A nivell matemàtic funciona amb el concepte de 'eigenvectors' i 'eigenvalues', que són valors que simplifiquen una matriu dient el mateix que la matriu original: [Eigenvector and Eigenvalue](https://www.mathsisfun.com/algebra/eigenvalue.html)
+
+El que fem és trobar la variànça total del conjunt de dades i intentarem reduir la dimensionalitat mantenint aquesta varinça al màxim. Per exemple, si tinguesim amb 10 dimensions un > 95% de la variança ja ens donariem per satisfets. L'elecció es realitza de manera que la primera component principal sigui la que major variància reculli; la segona ha de recollir la màxima variabilitat no recollida per la primera, i així successivament, triant un nombre que reculli un percentatge suficient de variància total.
+
+Dividirem l'estudi en les dades quantitatives (PCA, Principal Component Analysis) i mixed (FAMD, Factor Analysis of Mixed Data) per a dades qualitatives i quantitatives. [Info](https://rpkgs.datanovia.com/factoextra/)
+
+### Dades quantitatives (PCA)
+
+```{r}
+bank.pca <- bank.clean
+quantitative <-  bank.pca[,c(1,6,10,12:15)]
+
+# executem l'estudi PCA
+pca <- prcomp(quantitative, scale. = TRUE)
+
+# la funció mostra la variança de cada component 
+fviz_eig(pca, choice = c("variance"), addlabels = TRUE)
+
+# relació entre les dimensions i atributs.
+fviz_contrib(pca, choice = "var", axes = 1:4)
+
+# pve acumulada
+PVE <- 100*pca$sdev^2/sum(pca$sdev^2)
+
+plot(cumsum(PVE), type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+
+```
+
+Totes les variables continues tenen una bona aportació encara que podriem reduïr el nombre ja que amb 4 dimensions estem aportant molta informació de la mostra.
+En la segona gràfica es pot veure que amb 5 dimensions tenim una variança acumulada de quasi un 90%. Estem perdent un 10% de variança que ens pot interesar.
+
+### Dades mixtes (FAMD)
+```{r}
+
+mixed <- bank.clean
+
+res.famd <- FAMD(mixed, graph = FALSE, ncp = 17)
+
+# relació entre les dimensions i atributs.
+fviz_contrib(res.famd, choice = "var", axes = 1:10)
+
+plot(res.famd$eig[,3], type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+
+
+
+```
+
+Ara hem fet estudi amb tota la mostra, dades qualitatives i quantitatives. Com era de preveure la dada que menys aporta a les 10 principals dimensions i que **segurament podem eliminar es default**. Hem vist que la majoria de la mostra d'aquest atribut és d'un únic element.
+
+******
+# Clustering
+******
+## Joc de dades
+L'estudi de clustering el farem amb un dataset de [venta online](http://archive.ics.uci.edu/ml/datasets/Online+Retail). 
+
+Aquest és un conjunt de dades que conté totes les transaccions que es realitzen entre el 01/12/2010 i el 09/12/2011 per a un comerç online registrat al Regne Unit. La companyia ven sobretot regals únics per a totes les ocasions. Molts clients de l'empresa són majoristes. Tenim alguna informació bàsica (InvoiceNo, StockCode, Description, Quantity,...). 
+
+* Amb aquest estudi pretenem trobar clusters agrupant tipus de clients o tipus de productes.
+
+* També farem servir aquest dataset per executar l'algoritme d'associació i veure quines tendencies de compra tenen els usuaris. Relacions entre els productes comprats.
+
+## Anàlisi exploratori
+```{r message= FALSE, warning=FALSE}
+retail <- read.csv('data/online-retail/data.csv',stringsAsFactors = TRUE, sep = ',')
+attach(retail)
+```
+
+### Definició dels atributs
+
+* 1 - InvoiceNo: Número de factura. Un número enter de 6 dígits assignat exclusivament a cada transacció. Si aquest codi comença amb la lletra 'c' indica una cancel·lació. Character
+* 2 - StockCode: codi de producte (producte). Un string de 5 dígits assignat exclusivament a cada producte diferent. Character
+* 3 - Description: Nom del producte (article). Character
+* 4 - Quantity: les quantitats de cada producte (article) per transacció. Numeric
+* 5 - InvoiceDate: data i hora de la factura. El dia i l'hora en què es va generar la transacció. Numèric.
+* 6 - UnitPrice: Preu unitari. Preu del producte per unitat en lliure esterlina (£). Numèric.
+* 7 - CustomerID: Un 5 dígits assignat exclusivament a cada client. Character
+* 8 - Country: nom del país. El nom del país on resideix un client. Character
+
+```{r message= FALSE, warning=FALSE}
+summary(retail)
+```
+
+Es una primera ullada veiem: 
+
+* StockCode: tenim més de mig milió de productes diferents.
+* Quantity: Hi ha valors negatius que segurament seran les devolucions.
+* UnitPrice: la mitja dels productes es de 2.08, el Q1 de 1.25 i el mínim és de -11062.06, això ens diu que tenim valors atípics. El mateix passa amb els màxims. 
+* CustomerID: Tenim una gran quantitat d'elements nulls
+
+
+### Analisi de les dades dels clients
+
+Anem a veure com estan distribuïts els diferents atributs del dataset.
+
+### Invoices x paísos
+```{r message= FALSE, warning=FALSE}
+
+invoices.country <- retail %>% group_by(Country) %>% summarise(NumInvoices = n_distinct(InvoiceNo))
+ggplot(invoices.country, aes(x = reorder(Country, NumInvoices), y = NumInvoices)) +
+    geom_col() +
+    labs(title="Invoices x Country ",
+         x = NULL,
+         y = "Frequency") +
+    coord_flip()
+```
+
+Veiem clarament que la majoria de comandes vénen del Regne Unit molt de lluny seguit d'Alemania i França. La botiga online està registrada a Regne Unit.
+
+### Tipologia de productes (Description)
+```{r message= FALSE, warning=FALSE}
+ndescriptions <- groups(retail, 'Description')
+ndescriptions <- ndescriptions[order(ndescriptions$freq, decreasing = TRUE), ]
+ndescriptions <- ndescriptions[1:20, ]
+
+ggplot(ndescriptions, aes(x = reorder(Description, counts), y = counts)) +
+    geom_col() +
+    labs(title="Products (Description) ",
+         x = NULL,
+         y = "Frequency") +
+    coord_flip() 
+```
+
+Els 20 productes que més apareixen a la mostra. Veiem un producte que no té Description. Li afegim una.
+
+```{r}
+ndescription <- subset(retail, Description == '')
+head(ndescriptions)
+```
+
+Donant una ullada veig que són valors rars que tenen CustomerId amb null. Aquests valors els esborrarem.
+
+### Densitat de UnitPrice
+```{r message= FALSE, warning=FALSE}
+ggplot(retail, aes(x = UnitPrice))+ geom_density()
+
+ggplot(retail, aes(x = UnitPrice))+ geom_density(fill = "green", alpha = 0.2) + geom_vline(aes(xintercept = mean(UnitPrice)), 
+             linetype = "dashed", size = 0.6,
+             color = "#FC4E07") + xlim(c(0, 25))
+
+```
+
+Aquesta gràfica ens diu que la majoria de preus de productes tenen valors petits. Amb el summary ja es veia ja que (1st Qu.:1.25, Median :2.08, Mean: 4.61, 3rd Qu.: 4.13). Entre 1 i 4 lliures es mouen la majoria de preus, encara que hi ha valors extrems. Els valors negatius són devolucions.
+
+En la segona gràfica, he limitat el marge de preus. La línia vermella mostra la mitja.
+
+### Densitat de Quantity
+```{r message= FALSE, warning=FALSE}
+ggplot(retail, aes(x = Quantity))+ geom_density()
+
+ggplot(retail, aes(x = Quantity))+ geom_density(fill = "green", alpha = 0.2) + geom_vline(aes(xintercept = mean(Quantity)), 
+             linetype = "dashed", size = 0.6,
+             color = "#FC4E07") + xlim(c(0, 75))
+```
+
+El mateix estudi per a Quantity. Passa molt similar. Veiem que tenim extrems atípics però la desviació és molt petita. Els negatius són les devolucions.
+
+En la segona veiem que la gran majoria de nombre d'articles comprats estan al voltant de 10.
+
+## Crear nous atributs
+
+Crearem atributs nous per a tot el dataset
+
+### Returned
+
+Valor boolean que ens indica que si és una cancel·lació.
+
+```{r message= FALSE, warning=FALSE}
+
+retail$Cancellation <- startsWith(as.character(retail$InvoiceNo), 'C')
+cancellations <- subset(retail, retail$Cancellation  == 'TRUE')
+head(cancellations)
+
+paste("Percetatge de cancel·lacions: ", round(nrow(cancellations) / nrow(retail) * 100,3))
+```
+
+
+### TotalPrice
+
+Càlcul del preu total del registre (Quantity * UnitPrice)
+
+```{r message= FALSE, warning=FALSE}
+retail$TotalPrice <- retail$Quantity * retail$UnitPrice
+head(retail)
+```
+
+## Tasques de neteja
+
+### Camps null (missing values)
+Eliminem els valors nulls de CustomerID, ja que molts tenen registres bruts.
+
+```{r message= FALSE, warning=FALSE}
+retail.clean <- retail
+total.num <- nrow(retail)
+retail.clean <- subset(retail.clean, !is.na(CustomerID))
+cat("Hem eliminat un:", 100 - round(nrow(retail.clean) / total.num * 100, 2), "de registres.")
+```
+
+### Valors atípics extrems (outliers)
+
+Ja hem netejat força la mostra però si tenim més valors atípics. 
+```{r}
+summary(retail.clean)
+```
+
+### Valors atípics a Quantity
+```{r message= FALSE, warning=FALSE}
+retail.quantity.nooutliers <- retail.clean
+
+ggplot(data = retail.quantity.nooutliers ,aes(x=0,y=Quantity))+geom_boxplot()
+
+
+summary(retail.quantity.nooutliers)
+# podem veure els límits de Quantity
+limits <- outliersLimits(retail.quantity.nooutliers$Quantity)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+retail.quantity.nooutliers <-subset(retail.quantity.nooutliers, Quantity >= limits$under)
+retail.quantity.nooutliers <-subset(retail.quantity.nooutliers, Quantity <= limits$above)
+
+ggplot(data = retail.quantity.nooutliers,aes(x=0,y=Quantity))+geom_boxplot()
+
+total.rows <- nrow(retail.clean);
+rows <- nrow(retail.quantity.nooutliers)
+paste("Hem eliminat un", 100 - (rows / total.rows) * 100, "% de la mostra")
+
+```
+
+### Valors atípics de UnitPrice
+```{r message= FALSE, warning=FALSE}
+retail.unitprice.nooutliers <- retail.quantity.nooutliers
+
+ggplot(data = retail.unitprice.nooutliers ,aes(x=0,y=UnitPrice))+geom_boxplot()
+
+
+summary(retail.unitprice.nooutliers)
+# podem veure els límits de UnitPrice
+limits <- outliersLimits(retail.unitprice.nooutliers$UnitPrice)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+retail.unitprice.nooutliers <-subset(retail.unitprice.nooutliers, UnitPrice >= limits$under)
+retail.unitprice.nooutliers <-subset(retail.unitprice.nooutliers, UnitPrice <= limits$above)
+
+ggplot(data = retail.unitprice.nooutliers,aes(x=0,y=UnitPrice))+geom_boxplot()
+
+total.rows <- nrow(retail.quantity.nooutliers);
+rows <- nrow(retail.unitprice.nooutliers)
+paste("Hem eliminat un", 100 - (rows / total.rows) * 100, "% de la mostra")
+paste("Número d'elements final de la mostra:", rows)
+```
+
+
+## Tipus d'estudis a realitzar
+
+Prepararem les dades per a fer 2 tipus de clustering a realitzar.
+
+1. Per a fer clustering dels clients.
+2. Per a fer clustering dels productes.
+
+## Estudi de clusterings de customers
+
+Fem la copia dels dataset primer
+```{r message= FALSE, warning=FALSE}
+# veiem el percentatge de null
+retail.customer <- retail.clean
+```
+
+Anem a crear un dataset amb un registre per a cada tipus de client. Aquests clients s'identifiquen per el CustomerID.
+
+Ara anem agrupar les transaccions per CustomerId i treurem diferents valors calculats
+
+### Càlcul de nous valors per customers
+
+Per a realitzar el clustering de customers, muntarem una estructura de dades amb informació de comportament:
+
+1. CustomerId: identificador
+2. TotalCost: despesa total del Client
+3. NumInvoices: nombre de compres realitzades
+4. NumCancellations: nombre de cancel·lacions realitzades
+5. NumStocks: nombre de productes diferents que ha comprat el customer
+6. Days: dies des de la darrera compra comparat amb la data màxima de compra
+7. DiffInvoices: diferència entre compres i cancel·lacions
+
+
+```{r message= FALSE, warning=FALSE}
+# trobem el cost total que han fet els Customers 
+totalCost <- aggregate(cbind(retail.customer$TotalPrice) , by=list(CustomerID=retail.customer$CustomerID), FUN=sum)
+totalCost <-setNames(totalCost, c("CustomerID", "TotalCost"))
+
+# trobem el número de factures dels customers (sense cancellacions)
+retail.customer.invoices <- subset(retail.customer, Quantity > 0) 
+numInvoices <- retail.customer.invoices %>% group_by(CustomerID) %>% summarise(NumInvoices = n_distinct(InvoiceNo))
+
+# trobem el número de cancelacions de invoices dels customers
+retail.customer.cancellations <- subset(retail.customer, Quantity < 0)
+numCancellations <- retail.customer.cancellations %>% group_by(CustomerID) %>% summarise(NumCancellations = n_distinct(InvoiceNo))
+
+# trobem el número de productes diferents
+numStocks <- retail.customer.invoices %>% group_by(CustomerID) %>% summarise(NumStocks = n_distinct(StockCode))
+
+# trobem els dies des de la data màxima de compra (quan fà que no compren des de la data màxima)
+## primer la data màxima total
+retail.customer$InvoiceDateTime  <- as.POSIXct(retail.customer$InvoiceDate, format='%m/%d/%Y %H:%M')
+maxDate <- max(retail.customer$InvoiceDateTime)
+## segon la data màxima de cada customer
+lastDateCustomer <- retail.customer %>% group_by(CustomerID) %>% summarise(LastDate = max(InvoiceDateTime))
+lastDateCustomer$Diff <- round(as.numeric(maxDate - lastDateCustomer$LastDate, units = "days"), 1)
+lastDateCustomer$LastDate <- NULL
+lastDateCustomer <-setNames(lastDateCustomer, c("CustomerID", "Days"))
+
+# fem merge amb outter join per a tenir tots els registres i als nulls els hi posem valor 0
+retail.customer.final <- merge(numInvoices,numCancellations,by="CustomerID", all = TRUE)
+retail.customer.final[is.na(retail.customer.final)] <- 0
+retail.customer.final <- merge(retail.customer.final,totalCost,by="CustomerID", all = TRUE)
+retail.customer.final <- merge(retail.customer.final,numStocks,by="CustomerID", all = TRUE)
+retail.customer.final <- merge(retail.customer.final,lastDateCustomer,by="CustomerID", all = TRUE)
+retail.customer.final$DiffInvoices <-  retail.customer.final$NumInvoices - retail.customer.final$NumCancellations
+retail.customer.final[is.na(retail.customer.final)] <- 0
+
+summary(retail.customer.final)
+
+# finalment treiem la columna de CustomerId per a fer el clustering
+retail.customer.final <- retail.customer.final[,2:7]
+
+```
+
+Ja tenim montat el model de comportament de compra del customer. Per a fer la prova treurem la columna CustomerId.
+
+## Estudi de clustering de productes
+
+Per a realitzar el clustering de productes, muntarem una estructura de dades amb la següent informació:
+
+* StockCode: serà l'identificador del producte
+* Description: la descripció
+* UnitPrice: preu unitari
+* TotalStockUnits: unitats totals comprades
+* TotalStockPrice: preu total gastat
+* LastDate: darrera compra del producte
+
+Fem la copia dels dataset primer
+```{r message= FALSE, warning=FALSE}
+# veiem el percentatge de null
+retail.product <- retail.clean
+```
+
+
+```{r message= FALSE, warning=FALSE}
+head(retail.product)
+
+# generem les unitats totals venudes de cada producte 
+totalStockUnits <- retail.product %>% group_by(StockCode) %>% summarise(TotalStockUnits = sum(Quantity))
+totalStockUnits <-setNames(totalStockUnits, c("StockCode", "TotalStockUnits"))
+
+# generem el preu total venut de cada producte
+totalStockPrice <- retail.product %>% group_by(StockCode) %>% summarise(TotalStockPrice = sum(TotalPrice))
+totalStockPrice <-setNames(totalStockPrice, c("StockCode", "TotalStockPrice"))
+
+# per unit price agafarem el valor mitjà
+unitPrice <- retail.product %>% group_by(StockCode) %>% summarise(UnitPrice = round(mean(UnitPrice), 2))
+unitPrice <-setNames(unitPrice, c("StockCode", "UnitPrice"))
+
+# trobem els dia des de la data compra d'un producte (quan fà que no es compra un producte)
+# primer necessitem la data màxima total
+retail.product$InvoiceDateTime  <- as.POSIXct(retail.product$InvoiceDate, format='%m/%d/%Y %H:%M')
+maxDate <- max(retail.product$InvoiceDateTime)
+## segon la data màxima de cada producte
+lastDateProduct <- retail.product %>% group_by(StockCode) %>% summarise(LastDate = max(InvoiceDateTime))
+lastDateProduct$Diff <- round(as.numeric(maxDate - lastDateProduct$LastDate, units = "days"), 1)
+lastDateProduct$LastDate <- NULL
+lastDateProduct <-setNames(lastDateProduct, c("StockCode", "Days"))
+
+#  montem el dataset final
+retail.product.final <- unique(retail.product[,-c(1,4:11)])
+
+retail.product.final <- merge(retail.product.final,unitPrice,by="StockCode", all = TRUE)
+retail.product.final <- merge(retail.product.final,totalStockUnits,by="StockCode", all = TRUE)
+# retail.product.final <- merge(retail.product.final,totalStockPrice,by="StockCode", all = TRUE)
+retail.product.final <- merge(retail.product.final,lastDateProduct,by="StockCode", all = TRUE)
+retail.product.final$TotalStockPrice <- retail.product.final$TotalStockUnits * retail.product.final$UnitPrice
+
+summary(retail.product.final)
+
+# Treiem el StockCode i Description per a fer el clustering
+retail.product.final <- retail.product.final[,3:6]
+```
+
+Ja tenim una part del model generat per a cerca de clusters de productes.
+
+## Estudi PCA (Principal Component Analysis)
+
+Amb l'estudi PCA volem reduir la dimensionalitat del dataset.
+
+### Estudi PCA de Product 
+```{r}
+# agafem les variables numèriques amb les que farem l'estudi de clustering
+pca <- retail.product.final[,1:4]
+# executem l'estudi PCA
+pca <- prcomp(pca, scale. = TRUE)
+
+# la funció mostra la variança de cada component 
+fviz_eig(pca, choice = c("variance"), addlabels = TRUE)
+
+# relació entre les dimensions i atributs.
+fviz_contrib(pca, choice = "var", axes = 1:3)
+
+# pve acumulada
+PVE <- 100*pca$sdev^2/sum(pca$sdev^2)
+
+plot(cumsum(PVE), type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+```
+
+El que ens està dient l'estudi de variança explicada és que totes les dimensions tenen força pes encara que hi hagi algunes que en tinguin molt més. No obviarem cap d'elles.
+
+Amb la segona gràfica veiem que amb tres dimensions no expliquem gran part del model. A part que tenint només 4 variables treure'm res.
+
+### Estudi PCA de Consumer
+```{r}
+# agafem les variables numèriques amb les que farem l'estudi de clustering
+pca <- retail.customer.final[,2:6]
+
+# executem l'estudi PCA
+pca <- prcomp(pca, scale. = TRUE)
+
+# la funció mostra la variança de cada component 
+fviz_eig(pca, choice = c("variance", "eigenvalue"), addlabels = TRUE)
+
+# relació entre les dimensions i contribució
+fviz_contrib(pca, choice = "var", axes = 1:4)
+
+# pve acumulada
+PVE <- 100*pca$sdev^2/sum(pca$sdev^2)
+
+plot(cumsum(PVE), type = "o", 
+     ylab = "PVE acumulada", 
+     xlab = "Componente principal", 
+     col = "blue")
+
+```
+
+En la primera gràfica veiem la contribució de cada dimensió als conjunts de dades. Aquí hi ha més diferència entre la primera i la resta. Tenim una dimensió que ens dóna molta informació i les altres molt menys. 
+
+En la segona gràfica veiem que amb 4 dimensions "expliquem" gran part dels atributs.
+
+En la gràfica de proporció de variança a acumulada, una mica el mateix, amb 4 components tenim més del 90% del model explicat.
+
+Tampoc esborrarem cap atribut.
+
+
+******
+# Associació
+******
+
+## Joc de dades
+
+L'estudi d'associació el faré amb els mateix datase de [venta online](http://archive.ics.uci.edu/ml/datasets/Online+Retail)
+
+Per a realitzar l'estudi d'associations el que farem serà és agrupar cada InvoiceId com una transacció única. Veient quins articles tenim en les diferents transaccions podrem comprovar tendències de compra. A partir d'aquest estudi podrien fer campanyes d'ads (recordem que és un dataset de venta online), i mostrar anuncis oportuns quan l'usuari està navegant pel site i sabem quins productes ja ha comprat.
+
+## Anàlisi exploratori
+```{r}
+summary(retail)
+```
+
+L'hem fet en el apartat de Clustering.
+
+## Tasques de neteja
+
+### Camps null (missing values)
+```{r message= FALSE, warning=FALSE}
+retail.association <- retail
+total.num <- nrow(retail.association)
+retail.association <- subset(retail.association, !is.na(CustomerID))
+cat("Amb els NA hem eliminat un:", 100 - round(nrow(retail.association) / total.num * 100, 2), "de registres.")
+```
+
+### Eliminem devolucions
+
+No volem les devolucions per aquest estudi. No ens aporta res.
+
+```{r message= FALSE, warning=FALSE}
+total.num <- nrow(retail.association)
+retail.association <- subset(retail.association, !startsWith(as.character(retail.association$InvoiceNo), 'C'))
+cat("Amb les devolucions hem eliminat un:", 100 - round(nrow(retail.association) / total.num * 100, 2), "de registres.")
+```
+
+### Valors atípics extrems (outliers)
+
+Farem servir la funció del apartat 1 per a trobar els límits
+
+### Valors atípics a Quantity
+```{r message= FALSE, warning=FALSE}
+retail.quantity.nooutliers <- retail.association
+
+ggplot(data = retail.quantity.nooutliers ,aes(x=0,y=Quantity))+geom_boxplot()
+
+
+summary(retail.quantity.nooutliers)
+# podem veure els límits de Quantity
+limits <- outliersLimits(retail.quantity.nooutliers$Quantity)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+retail.quantity.nooutliers <-subset(retail.quantity.nooutliers, Quantity >= limits$under)
+retail.quantity.nooutliers <-subset(retail.quantity.nooutliers, Quantity <= limits$above)
+
+ggplot(data = retail.quantity.nooutliers,aes(x=0,y=Quantity))+geom_boxplot()
+
+total.rows <- nrow(retail.association);
+rows <- nrow(retail.quantity.nooutliers)
+paste("Hem eliminat un", 100 - (rows / total.rows) * 100, "% de la mostra")
+
+```
+
+### Valors atípics de UnitPrice
+```{r message= FALSE, warning=FALSE}
+retail.unitprice.nooutliers <- retail.quantity.nooutliers
+
+ggplot(data = retail.unitprice.nooutliers ,aes(x=0,y=UnitPrice))+geom_boxplot()
+
+
+summary(retail.unitprice.nooutliers)
+# podem veure els límits de UnitPrice
+limits <- outliersLimits(retail.unitprice.nooutliers$UnitPrice)
+paste("Límit inferior:", limits$under)
+paste("Límit superior:", limits$above)
+
+# treiem aquest valors atípics
+retail.unitprice.nooutliers <-subset(retail.unitprice.nooutliers, UnitPrice >= limits$under)
+retail.unitprice.nooutliers <-subset(retail.unitprice.nooutliers, UnitPrice <= limits$above)
+
+ggplot(data = retail.unitprice.nooutliers,aes(x=0,y=UnitPrice))+geom_boxplot()
+
+total.rows <- nrow(retail.quantity.nooutliers);
+rows <- nrow(retail.unitprice.nooutliers)
+paste("Hem eliminat un", 100 - (rows / total.rows) * 100, "% de la mostra")
+paste("Número d'elements final de la mostra:", rows)
+```
+
+Realment hem fet molta neteja de la mostra. Ens podríem haver quedat amb més dades i no filtrar tant per UnitPrice sobretot perquè estem traient força elements (productes) per a fer l'anàlisi. De totes maneres, amb la mostra que ens ha quedat podem fer perfectament l'estudi per a predir comportament de compra amb dades més coherents i el support amb valors extrems seria força baix.
+
+**En la segona práctica farem l'estudi d'associació amb i sense els elements atípics per a comparar resultats.**
+
+
+## Estudi de les dades resultants
+Com hem comentat farem servir cada una de les Invoices com a transaccions. Cada transacció conté un nombre de productes.
+```{r}
+retail.association <- retail.unitprice.nooutliers
+summary(retail.association)
+invoices <- retail.association[,"InvoiceNo"]
+paste("El número total de transaccions és de: ", n_distinct(invoices))
+```
+
+## Obtenció de transaccions
+```{r}
+transations <- split(x=retail.association[,"Description"],f=retail.association$InvoiceNo)
+
+# trasformem el data com a transactions. Cada transacció es una compra (InvioceNo) i els productes que ha comprat
+transations <- as(transations,"transactions")
+
+itemFrequencyPlot(transations, support = 0.02, cex.names = .6, col = rainbow(15), topN=30)
+```
+
+Aquest son els elements més utilitzats.
+Ja hem generat les transaccions i ja està preparat per a estudiar les associacions. 
