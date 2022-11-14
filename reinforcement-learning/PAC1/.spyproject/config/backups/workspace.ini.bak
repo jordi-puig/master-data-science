@@ -1,0 +1,12 @@
+[workspace]
+restore_data_on_startup = True
+save_data_on_exit = True
+save_history = True
+save_non_project_files = False
+project_type = 'empty-project-type'
+recent_files = ['ex4.py', 'ex4b.py', 'blackjack_env.py', 'ex3-start-exploring.py', 'QL_SARSA_cartpole.py', '..\\..\\..\\..\\anaconda3\\lib\\site-packages\\gym\\envs\\registration.py']
+
+[main]
+version = 0.2.0
+recent_files = []
+
