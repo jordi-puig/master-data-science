@@ -82,8 +82,3 @@ class DQN_CNN(nn.Module):
 
     def feature_size(self):
         return self.red_cnn(autograd.Variable(torch.zeros(1, *self.input_shape)).to(device=self.device)).view(1, -1).size(1)
-
-
-
-
-

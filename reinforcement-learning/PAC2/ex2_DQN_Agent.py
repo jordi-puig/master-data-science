@@ -2,6 +2,7 @@ import torch
 from copy import deepcopy
 from ex2_Preprocess import preprocess_observation, stack_frame
 import numpy as np
+from datetime import datetime
 
 class DQNAgent:
     ###################################################
@@ -86,7 +87,7 @@ class DQNAgent:
         episode = 0
         training = True
         print("Training...")
-        maximo = 0
+        start_time = datetime.now()
         while training:
             self.state0 = stack_frame(None, preprocess_observation(self.env.reset()), True)
             self.total_reward = 0
@@ -119,7 +120,15 @@ class DQNAgent:
                     self.mean_training_rewards.append(mean_rewards)
 
                     ##################################################################
-                    print("\rEpisode {:d} Mean Rewards {:.2f} Epsilon {} , Maxim {:.2f}\t\t".format(episode, mean_rewards, self.epsilon,maximo), end="")
+                    end_time = datetime.now()
+                    # get difference time
+                    delta = end_time - start_time 
+                    # time difference in minutes
+                    total_minutes = delta.total_seconds() / 60
+                    estimated_remain_time = total_minutes / episode * (max_episodes - episode)                    
+                    print("\rEpisode {:d} Mean Rewards {:.2f} Epsilon {} Time {} minutes Remaining Time {} minutes\t\t"
+                          .format(episode, mean_rewards, round(self.epsilon,4),round(total_minutes,2), round(estimated_remain_time,2)), end="")                    
+
 
                     # Comprovar si s'ha arribat al màxim d'episodis
                     if episode >= max_episodes:

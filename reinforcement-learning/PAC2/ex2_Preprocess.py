@@ -1,13 +1,6 @@
-import warnings
-import gym
 from skimage import transform
 import numpy as np
-import matplotlib.pyplot as plt
 
-
-warnings.filterwarnings('ignore')
-env = gym.make('SpaceInvaders-v4')
-env.reset()
 
 def scale_lumininance(obs):
      """
@@ -41,45 +34,16 @@ def preprocess_observation(obs):
     return obs_proc
 
 def stack_frame(stacked_frames, frame, is_new):
-        """Stacking Frames.
-        Params
-        ======
-            stacked_frames (array): array de frames (al retornar-lo ha de contenir 4 frames)
-            frame: Nova imatge per a afegir a l'array (s'ha d'esborrar la més antiga)
-            is_new: Primera vegada que s'utilitza l'array.
-        """
-        if is_new:
-            stacked_frames = np.array([frame, frame, frame, frame])                                    
-        else:
-            stacked_frames[:-1] = stacked_frames[1:]
-            stacked_frames[-1] = frame                                
-        return stacked_frames
-
-
-# Omplim 'state_stack' amb 4 còpies idèntiques del frame inicial de la partida
-state_stack= stack_frame(None, env.reset(), True)
-
-# Juguem una partida aleatòria i anem actualitzant els 4 frames de 'state_stack'
-# conforme es van produint de nous
-while True:
-    action = env.action_space.sample()
-    next_state, reward, done, info = env.step(action)
-    state_stack = stack_frame(state_stack, next_state, False)
-
-    if done:
-         break
-
-# Mostrem els darrers 4 frames de la partida que han quedat enmagatzemats a 'state_stack'
-fig = plt.figure(figsize=(10, 7))
-rows = 2
-columns = 2
-cont=1
-
-for i in state_stack:
-    fig.add_subplot(rows, columns, cont)
-    plt.imshow(i)
-    plt.axis('off')
-    plt.title('Fotograma:' + str(cont))
-    cont = cont +1
-
-
+    """Stacking Frames.
+    Params
+    ======
+        stacked_frames (array): array de frames (al retornar-lo ha de contenir 4 frames)
+        frame: Nova imatge per a afegir a l'array (s'ha d'esborrar la més antiga)
+        is_new: Primera vegada que s'utilitza l'array.
+    """        
+    if is_new:
+        stacked_frames = np.array([frame, frame, frame, frame])                                    
+    else:
+        stacked_frames[:-1] = stacked_frames[1:]
+        stacked_frames[-1] = frame                                
+    return stacked_frames
