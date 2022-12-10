@@ -73,7 +73,7 @@ class DuelingDQN(torch.nn.Module):
     def forward(self, x):
         """  
         x: estat de l'entorn
-        """             
+        """            
         x = self.red_cnn(x)
         x = x.view(x.size(0), -1) # x: vector de sortida de la xarxa convolucional
         advantage = self.advantage(x) # advantage: sortida de la xarxa neuronal advantage
