@@ -173,7 +173,6 @@ class DuelingDQNAgent:
             next_actions_vals = next_actions.reshape(-1,1).to(device=self.device)
         else:
             next_actions_vals = torch.LongTensor(next_actions).reshape(-1,1).to(device=self.device)
-#            next_actions_vals = torch.max(self.main_network.get_qvals(next_states), dim=-1)[1].reshape(-1,1).to(device=self.device)
         # Obtenim els valors de Q de la xarxa objectiu
         target_qvals = self.target_network.get_qvals(next_states)
         qvals_next = torch.gather(target_qvals, 1, next_actions_vals).detach()
