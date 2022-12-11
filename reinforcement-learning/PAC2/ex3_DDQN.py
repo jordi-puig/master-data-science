@@ -74,11 +74,11 @@ class DuelingDQN(torch.nn.Module):
         """  
         x: estat de l'entorn
         """   
-        if len(x.shape) == 3:
-            x = x.unsqueeze(0)
+        if len(x.shape) == 3: # si x és un estat, afegim una dimensió per a poder passar-la a la xarxa convolucional
+            x = x.unsqueeze(0) # afegim una dimensió per a poder passar-la a la xarxa convolucional en cas que sigui un estat i no un batch d'estats
                                     
-        x = self.red_cnn(x)
-        x = x.view(x.size(0), -1) # x: vector de sortida de la xarxa convolucional
+        x = self.red_cnn(x) # x: sortida de la xarxa convolucional
+        x = x.view(x.size(0), -1) # aplana la xarxa convolucional per a poder passar-la a la xarxa neuronal avantatge i value
         advantage = self.advantage(x) # advantage: sortida de la xarxa neuronal advantage
         value = self.value(x) # value: sortida de la xarxa neuronal value
         return value + advantage - advantage.mean() # sortida de la xarxa neuronal

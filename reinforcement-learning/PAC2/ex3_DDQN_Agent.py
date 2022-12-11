@@ -47,6 +47,7 @@ class DuelingDQNAgent:
         self.state0 = stack_frame(None, preprocess_observation(self.env.reset()), True) # inicialitzem l'stack d'estats amb el valor inicial de la primera observació
 
         self.update_loss = [] # loss de l'actualització de la xarxa
+        self.training_update_loss = [] # pérdues de l'entrenament
         self.training_rewards = [] # recompenses de l'entrenament
         self.mean_training_rewards = [] # mitjana de recompenses de l'entrenament
         self.sync_eps = [] # epsilon de sincronització
@@ -118,6 +119,7 @@ class DuelingDQNAgent:
                     ########TODO: Emmagatzemar epsilon, training rewards i loss#######
                     self.sync_eps.append(self.epsilon) # emmagatzemar epsilon de sincronització per a cada episodi 
                     self.training_rewards.append(self.total_reward) # emmagatzemar recompensa de cada episodi
+                    self.training_update_loss.append(self.update_loss)                                         
                     self.update_loss = []
 
 

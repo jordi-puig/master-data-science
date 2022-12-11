@@ -24,4 +24,4 @@ REWARD_THRESHOLD = 350 #Llindar de recompensa on es considera que s'ha assolit e
 buffer = experienceReplayBuffer(memory_size=MEMORY_SIZE, burn_in=BURN_IN)
 dqn = DQN_CNN(env, learning_rate=lr)
 agentDQN = DQNAgent(env, dqn, buffer, REWARD_THRESHOLD, EPSILON, EPSILON_DECAY, BATCH_SIZE)
-agentDQN.train(gamma=GAMMA, max_episodes=MAX_EPISODES, batch_size=BATCH_SIZE, dnn_update_frequency=DNN_UPD, dnn_sync_frequency=DNN_SYNC)
+agentDQN.train(gamma=GAMMA, max_episodes=MAX_EPISODES, dnn_update_frequency=DNN_UPD, dnn_sync_frequency=DNN_SYNC)

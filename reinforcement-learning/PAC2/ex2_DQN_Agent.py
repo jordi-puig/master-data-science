@@ -42,7 +42,7 @@ class DQNAgent:
     ###################################################################
     #####TODO2: Inicialitzar variables extra que són necessàries######
     def initialize(self):
-        self.update_loss = []
+        self.training_update_loss = []
         self.training_rewards = []
         self.mean_training_rewards = []
         self.sync_eps = []
@@ -74,8 +74,7 @@ class DQNAgent:
         return done
     
     ## Entrenament
-    def train(self, gamma=0.99, max_episodes=50000,
-              batch_size=32,
+    def train(self, gamma=0.99, max_episodes=50000,             
               dnn_update_frequency=4,
               dnn_sync_frequency=2000, min_episodios=250, min_epsilon = 0.01):
         self.gamma = gamma
@@ -110,7 +109,8 @@ class DQNAgent:
                     ##################################################################
                     ########TODO: Emmagatzemar epsilon, training rewards i loss#######
                     self.sync_eps.append(self.epsilon)
-                    self.training_rewards.append(self.total_reward)                                                  
+                    self.training_rewards.append(self.total_reward)          
+                    self.training_update_loss.append(self.update_loss)                                         
                     self.update_loss = []
 
 
