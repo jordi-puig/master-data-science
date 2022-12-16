@@ -64,7 +64,7 @@ class DQN_CNN(nn.Module):
 
     ### Mètode e-greedy
     def get_action(self, state, epsilon=0.05):
-        if np.random.random() < epsilon:            
+        if np.random.random() < epsilon:           
             action = np.random.choice(self.actions)
         else:
             qvals = self.get_qvals(state)
