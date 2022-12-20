@@ -61,7 +61,9 @@ class ReinforceAgent:
                 ######TODO 3: Prendre una nova acció #####################
                 action_probs = self.dnnetwork.get_action_prob(state0).detach().numpy()   #distribució de probabilitat de les accions donat l'estat actual                                             
                 action_probs = np.squeeze(action_probs)                    
+                print(action_probs)
                 action = np.random.choice(action_space, p=action_probs) #acció aleatòria de la distribució de probabilitat
+                print(action)
                 next_state, reward, gamedone, _ = self.env.step(action)
                 #######
 
@@ -95,7 +97,7 @@ class ReinforceAgent:
                         #######################################
                         ###TODO : emmagatzemar training_loss###
                         ###########
-                        self.training_update_loss.append(np.mean(self.update_loss))                                         
+                        self.training_update_loss.append(self.update_loss)                                         
                         self.update_loss = []
 
                         # Resetejem les variables de l'episodi

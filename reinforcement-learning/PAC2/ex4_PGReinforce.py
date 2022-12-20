@@ -65,11 +65,8 @@ class PGReinforce(torch.nn.Module):
         state_t = torch.FloatTensor(state).to(device=self.device)
         cnn_out = self.red_cnn(state_t).reshape(-1,  self.fc_layer_inputs)   
         cnn_lineal_out = self.red_lineal(cnn_out)
-        # clipped per evitar NaNs.         
-        print("pre clamp")   
+        # clipped per evitar NaNs.
         cnn_lineal_out_clamped = torch.clamp(cnn_lineal_out, 1e-8, 1-1e-8)
-        print("post clamp")   
-        print(cnn_lineal_out_clamped)
         return cnn_lineal_out_clamped
 
     def feature_size(self):
