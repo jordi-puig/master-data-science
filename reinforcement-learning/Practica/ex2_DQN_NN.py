@@ -12,10 +12,10 @@ env = gym.make('LunarLander-v2')
 
 
 ### Definició de la xarxa neuronal
-class DQN_CNN(nn.Module):
+class DQN_NN(nn.Module):
     
     def __init__(self, env, learning_rate=1e-3):
-        super(DQN_CNN, self).__init__()
+        super(DQN_NN, self).__init__()
         """
         Params
         ======
@@ -45,8 +45,8 @@ class DQN_CNN(nn.Module):
         # ## Construcció de la xarxa neuronal      
         self.red_lineal = nn.Sequential(
             nn.Linear(8, 64),
-            nn.ReLU(),
-            nn.Linear(64, 64),
+#            nn.ReLU(),
+#            nn.Linear(64, 64),
             nn.ReLU(),
             nn.Linear(64, self.n_outputs),
             nn.ReLU()
