@@ -45,8 +45,8 @@ class DQN_NN(nn.Module):
         # ## Construcció de la xarxa neuronal      
         self.red_lineal = nn.Sequential(
             nn.Linear(8, 64),
-#            nn.ReLU(),
-#            nn.Linear(64, 64),
+            nn.ReLU(),
+            nn.Linear(64, 64),
             nn.ReLU(),
             nn.Linear(64, self.n_outputs),
             nn.ReLU()

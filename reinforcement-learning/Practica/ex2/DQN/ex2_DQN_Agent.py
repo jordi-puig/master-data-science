@@ -99,48 +99,89 @@ class DQNAgent:
                     self.target_network.load_state_dict(self.main_network.state_dict())                                        
                                        
                 if gamedone:
-                    episode += 1
+                    episode += 1                    
                     ##################################################################
                     ######## Emmagatzemar epsilon, training rewards i loss#######
-                    self.sync_eps.append(self.epsilon)
-                    self.training_rewards.append(self.total_reward)         
-                    self.training_update_loss.append(np.mean(self.update_loss))                                              
-                    self.update_loss = []
+                    self.save_statistics()
 
                     #######################################################################################
                     ### Calcular la mitjana de recompensa dels últims X episodis, i emmagatzemar####
                     mean_rewards = np.mean(self.training_rewards[-self.nblock:])
-                    self.mean_training_rewards.append(mean_rewards)
+                    self.calculate_mean_rewards(mean_rewards)
 
                     ##################################################################
-                    end_time = datetime.now()
-                    # get difference time
-                    delta = end_time - start_time 
-                    # time difference in minutes
-                    total_minutes = delta.total_seconds() / 60
-                    estimated_remain_time = total_minutes / episode * (max_episodes - episode)                    
-                    print("\rEpisode {:d} Mean Rewards {:.2f} Epsilon {} Time {} minutes Remaining Time {} minutes\t\t"
-                          .format(episode, mean_rewards, round(self.epsilon,4),round(total_minutes,2), round(estimated_remain_time,2)), end="")                    
+                    ### calcular el temps restant i mostrar-lo
+                    self.calculate_remaining_time(start_time, episode, max_episodes, mean_rewards)
+              
+                    #################################################################################
+                    ### comprovar si s'ha assolit el màxim d'episodis
+                    training = not self.is_solved_by_episode(episode, max_episodes)
 
-
-                    # Comprovar si s'ha arribat al màxim d'episodis
-                    if episode >= max_episodes:
-                        training = False
-                        print('\nEpisode limit reached.')
+                    #################################################################################
+                    ### si no s'ha assolit el màxim d'episodis, continuar entrenant
+                    if not training:
+                        print('\nTraining finished.')
                         break
 
-                    # Acaba el joc si la mitjana de recompenses ha arribat al llindar fixat per a aquest joc
-                    # i s'ha entrenat un mínim d'episodis
-                    if mean_rewards >= self.reward_threshold and min_episodios <  episode:
-                        training = False
-                        print('\nEnvironment solved in {} episodes!'.format(episode))
-                        break
+                    #################################################################################
+                    ### comprovar si s'ha assolit el llindar de recompensa i un mínim d'episodis
+                    training = not self.is_solved_by_reward(episode, min_episodios, mean_rewards)
 
+                    #################################################################################
+                    ### si no s'ha assolit el màxim d'episodis, continuar entrenant
+                    if not training:
+                        print('\nTraining finished.')
+                        break
+                    
                     #################################################################################
                     ###### Actualitzar epsilon ########
                     # actualitzar epsilon segons la velocitat de descens fixada on no pot ser inferior a min_epsilon
                     self.epsilon = max(self.epsilon * self.eps_decay, min_epsilon)
 
+
+    ##################################################################
+    ######## Comprovar si s'ha arribat al llindar de recompensa i un mínim d'episodis
+    def is_solved_by_reward(self, episode, min_episodios, mean_rewards):  
+        if mean_rewards >= self.reward_threshold and min_episodios <  episode:
+            print('\nEnvironment solved in {} episodes!'.format(episode))
+            return True
+        else:
+            return False
+
+    ##################################################################
+    ######## Comprovar si s'ha arribat al màxim d'episodis
+    def is_solved_by_episode(self, episode, max_episodes):
+        if episode >= max_episodes:
+            print('\nEpisode limit reached.')
+            return True
+        else:
+            return False
+
+    ###############################################################
+    ######## Calcular el temps restant i mostrar-lo
+    def calculate_remaining_time(self, start_time, episode, max_episodes, mean_rewards):
+        end_time = datetime.now()
+        # get difference time
+        delta = end_time - start_time 
+        # time difference in minutes
+        total_minutes = delta.total_seconds() / 60
+        estimated_remain_time = total_minutes / episode * (max_episodes - episode)                    
+        print("\rEpisode {:d} Mean Rewards {:.2f} Epsilon {} Time {} minutes Remaining Time {} minutes\t\t"
+              .format(episode, mean_rewards, round(self.epsilon,4),round(total_minutes,2), round(estimated_remain_time,2)), end="")               
+        
+
+    ##################################################################
+    ######## Calcular la mitjana de recompensa dels últims X episodis, i emmagatzemar####
+    def calculate_mean_rewards(self, mean_rewards):
+        self.mean_training_rewards.append(mean_rewards)
+
+    ##################################################################
+    ######## Emmagatzemar epsilon, training rewards i loss#######
+    def save_statistics(self):
+        self.sync_eps.append(self.epsilon)
+        self.training_rewards.append(self.total_reward)         
+        self.training_update_loss.append(np.mean(self.update_loss))                                              
+        self.update_loss = []
 
     ####################################
     #### Càlcul de la pèrdua ####

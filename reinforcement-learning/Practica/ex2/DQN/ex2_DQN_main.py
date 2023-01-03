@@ -33,8 +33,8 @@ EPSILON_MIN = 0.01      #Valor mínim d'epsilon
 BURN_IN = 1000          #Nombre d'episodis inicials utilitzats per emplenar el buffer abans d'entrenar
 MAX_EPISODES = 2000     #Nombre màxim d'episodis (l'agent ha d'aprendre abans d'arribar a aquest valor)
 MIN_EPISODES = 250      #Nombre mínim d'episodis
-DNN_UPD = 2             #Freqüència d'actualització de la xarxa neuronal
-DNN_SYNC = 1000         #Freqüència de sincronització de pesos entre la xarxa neuronal i la xarxa objectiu
+DNN_UPD = 3             #Freqüència d'actualització de la xarxa neuronal
+DNN_SYNC = 2000         #Freqüència de sincronització de pesos entre la xarxa neuronal i la xarxa objectiu
 
 REWARD_THRESHOLD = 200 #Llindar de recompensa on es considera que s'ha assolit el problema
 
