@@ -96,7 +96,9 @@ class DQNAgent:
                 ########################################################################################
                 ### Sincronitzar xarxa principal i xarxa objectiu segons la freqüència establerta
                 if self.step_count % dnn_sync_frequency == 0:
-                    self.target_network.load_state_dict(self.main_network.state_dict())                                        
+                    self.soft_update(self.main_network, self.target_network, 1e-3)
+                    # self.target_network.load_state_dict(self.main_network.state_dict())                                        
+                    
                                        
                 if gamedone:
                     episode += 1                    
@@ -138,6 +140,18 @@ class DQNAgent:
                     # actualitzar epsilon segons la velocitat de descens fixada on no pot ser inferior a min_epsilon
                     self.epsilon = max(self.epsilon * self.eps_decay, min_epsilon)
 
+
+    def soft_update(self, local_model, target_model, tau):
+        """Soft update model parameters.
+        θ_target = τ*θ_local + (1 - τ)*θ_target
+        Params
+        ======
+            local_model (PyTorch model): weights will be copied from
+            target_model (PyTorch model): weights will be copied to
+            tau (float): interpolation parameter
+        """
+        for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
+            target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data) 
 
     ##################################################################
     ######## Comprovar si s'ha arribat al llindar de recompensa i un mínim d'episodis
