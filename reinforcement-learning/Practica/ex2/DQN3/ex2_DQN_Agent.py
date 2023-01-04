@@ -1,7 +1,6 @@
 import random
 import numpy as np
-from collections import deque
-
+from datetime import datetime
 import torch as T
 import torch.nn.functional as F
 import torch.optim as optim
@@ -159,6 +158,7 @@ class Agent:
         self.training_rewards = []  # llista amb els reward per episodi
         self.mean_training_rewards = []  # llista amb la mitjana dels reward per episodi
 
+        start_time = datetime.now()
         print("Training...")
         
         for episode in range(1, n_episodes + 1):
@@ -178,9 +178,10 @@ class Agent:
             self.eps = max(eps_min, eps_decay * self.eps)  # decrease epsilon            
             
             # afegir el reward de l'episodi a la llista
-            self.__save_statistics(self.total_reward)
-            
-            print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, self.__get_mean_training_rewards()), end="")
+            self.__save_statistics()
+            s
+            # mostrar informació de l'episodi actual
+            self.__log_info(start_time, episode)
             
             ### comprovar si s'ha assolit el màxim d'episodis
             training = not self.__is_solved_by_episode(episode, n_episodes) and not self.__is_solved_by_reward(episode, min_episodes, self.__get_mean_training_rewards())
@@ -191,7 +192,7 @@ class Agent:
                 break
 
             if episode % 100 == 0:
-                print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, self.__get_mean_training_rewards()))
+                print('\rEpisode {}\tMean Rewards: {:.2f}\t'.format(episode, self.__get_mean_training_rewards()))
             if self.__get_mean_training_rewards() >= 200.0:
 
                 break        
@@ -200,7 +201,7 @@ class Agent:
         return np.mean(self.training_rewards[-self.nblock:])
 
     ######## Emmagatzemar epsilon, training rewards i loss#######
-    def __save_statistics(self, total_reward):
+    def __save_statistics(self):
         self.sync_eps.append(self.eps)              
         self.training_rewards.append(self.total_reward)         
         self.mean_training_rewards.append(np.mean(self.training_rewards[-self.nblock:]))
@@ -222,4 +223,15 @@ class Agent:
             print('\nEpisode limit reached.')
             return True
         else:
-            return False            
+            return False        
+
+
+    ######## Mostrar informació de l'episodi actual
+    def __log_info(self, start_time, episode):
+        end_time = datetime.now()
+        # get difference time
+        delta = end_time - start_time 
+        # time difference in minutes
+        total_minutes = delta.total_seconds() / 60           
+        print('\rEpisode {}\tMean Rewards: {:.2f}\tEpsilon {}\tTime {} minutes\t'
+              .format(episode, self.__get_mean_training_rewards(), round(self.eps,4), round(total_minutes,2)), end="")                    
