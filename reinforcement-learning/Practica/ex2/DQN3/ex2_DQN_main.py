@@ -38,9 +38,9 @@ def dqn(n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.99
         state = env.reset()
         score = 0
         for t in range(max_t):
-            action = agent.act(state, eps)
+            action = agent.get_action(state, eps)
             next_state, reward, done, _ = env.step(action)
-            agent.step(state, action, reward, next_state, done)
+            agent.take_step(state, action, reward, next_state, done)
             state = next_state
             score += reward
             if done:

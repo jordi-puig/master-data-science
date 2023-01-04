@@ -45,10 +45,9 @@ class Agent:
             print('Running on CPU')
                
         # Inicialització de les xarxes locals i target i de l'optimitzador
-        self.build_networks()
+        self.__initialize_networks()
 
-    def build_networks(self):
-
+    def __initialize_networks(self):
         # Inicialització de les xarxes locals i target            
         self.qnetwork_local = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
         self.qnetwork_target = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
@@ -61,25 +60,24 @@ class Agent:
         # Inicialització del comptador de pasos per a l'actualització de la xarxa neuronal
         self.t_step = 0
 
-    def step(self, state, action, reward, next_state, done):
-        # Save experience in replay memory
+    def take_step(self, state, action, reward, next_state, done):
+        """
+        Afegeix l'experiència a la memòria i actualitza la xarxa neuronal
+        """
+        # emmagatzemar l'experiència en el buffer de memòria
         self.memory.append(state, action, reward, next_state, done)
 
-        # Learn every UPDATE_EVERY time steps.
+        # Actualitzar la xarxa neuronal cada dnn_upd pasos
         self.t_step = (self.t_step + 1) % self.dnn_upd
         if self.t_step == 0:
-            # If enough samples are available in memory, get random subset and learn
+            # Si hi ha suficients experiències en el buffer, agafar un lot i actualitzar la xarxa neuronal
             if len(self.memory) > self.batch_size:
                 experiences = self.memory.sample_batch()
-                self.learn(experiences, self.gamma)
+                self.update(experiences, self.gamma)
 
-    def act(self, state, eps=0.):
-        """Returns actions for given state as per current policy.
-
-        Params
-        ======
-            state (array_like): current state
-            eps (float): epsilon, for epsilon-greedy action selection
+    def get_action(self, state, eps):
+        """
+        Retorna l'acció segons l'estat actual i l'epsilon-greedy
         """
         state = T.from_numpy(state).float().unsqueeze(0).to(self.device)
         self.qnetwork_local.eval()
@@ -87,47 +85,43 @@ class Agent:
             action_values = self.qnetwork_local(state)
         self.qnetwork_local.train()
 
-        # Epsilon-greedy action selection
+        # Epsilon-greedy per a seleccionar l'acció. 
+        # Si el valor aleatori és més gran que l'epsilon agafar l'acció amb el valor més alt segons la xarxa neuronal
+        # Si no, agafar una acció aleatòria
         if random.random() > eps:
             return np.argmax(action_values.cpu().data.numpy())
         else:
             return random.choice(np.arange(self.n_action))
 
-    def learn(self, experiences, gamma):
-        """Update value parameters using given batch of experience tuples.
-        Params
-        ======
-            experiences (Tuple[torch.Tensor]): tuple of (s, a, r, s', done) tuples
-            gamma (float): discount factor
+    def update(self, experiences, gamma):
+        """
+        Actualitza els pesos de la xarxa neuronal local i target
         """
         states, actions, rewards, next_states, dones = experiences
 
-        # Get max predicted Q values (for next states) from target model
+        # obtenir els valors Q de l'estat següent segons la xarxa neuronal target
         q_targets_next = self.qnetwork_target(next_states).detach().max(1)[0].unsqueeze(1)
-        # Compute Q targets for current states
+        
+        # calcular els valors Q segons l'equació de Bellman teni en compte si l'estat és terminal i el parametre gamma
         q_targets = rewards + (gamma * q_targets_next * (1 - dones))
 
-        # Get expected Q values from local model
+        # obtenir els valors Q de l'estat actual segons la xarxa neuronal local
         q_expected = self.qnetwork_local(states).gather(1, actions)
 
-        # Compute loss
+        # calcular la funció de pèrdua segons l'error quadràtic mitjà
         loss = F.mse_loss(q_expected, q_targets)
-        # Minimize the loss
+
+        # minimitzar la funció de pèrdua amb l'optimitzador
         self.optimizer.zero_grad()
         loss.backward()
         self.optimizer.step()
 
-        # ------------------- update target network ------------------- #
+        # actualitzar els pesos de la xarxa neuronal target amb un soft update per a reduir el problema de l'estabilitat
         self.soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
 
     def soft_update(self, local_model, target_model, tau):
-        """Soft update model parameters.
-        θ_target = τ*θ_local + (1 - τ)*θ_target
-        Params
-        ======
-            local_model (PyTorch model): weights will be copied from
-            target_model (PyTorch model): weights will be copied to
-            tau (float): interpolation parameter
+        """
+        Soft update dels pesos de la xarxa neuronal target
         """
         for target_param, local_param in zip(target_model.parameters(), local_model.parameters()):
             target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data)    
