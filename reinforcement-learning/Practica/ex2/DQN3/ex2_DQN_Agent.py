@@ -8,45 +8,57 @@ import torch.optim as optim
 from ex2_DQN_NN import DQNetwork
 from ex2_Buffer import ReplayBuffer
 
-# hyper parameters
-BUFFER_SIZE = int(1e5)  # replay buffer size
-BATCH_SIZE = 64  # minibatch size
-GAMMA = 0.99  # discount factor
-TAU = 1e-3  # for soft update of target parameters
-LR = 5e-4  # learning rate
-UPDATE_EVERY = 4  # how often to update the network
-
 class Agent:
-    """Interacts with and learns from the environment."""
-
-    def __init__(self, state_size, action_size, seed):
-        """Initialize an Agent object.
-
+    """ Agent que interactua amb l'entorn i apren a través de DQN"""    
+    def __init__(self, env, seed, learning_rate= 1e-3, gamma=0.99, 
+                tau=1e-3, buffer_size=100000, batch_size=64, dnn_upd=4):
+        """ Inicialitza l'agent per a l'aprenentatge per DQN
+            L'agent inicialitza la xarxa neuronal local i target, el buffer de memòria i l'optimitzador    
         Params
         ======
-            state_size (int): dimension of each state
-            action_size (int): dimension of each action
-            seed (int): random seed
+            env: Entorn de gym
+            n_state (int): Dimensions de l'espai d'estats
+            n_action (int): Dimensions de l'espai d'accions
+            seed (int): Random seed per a inicialitzar els valors aleatoris
+            learning_rate (float): Velocitat d'aprenentatge
+            gamma (float): Valor gamma de l'equació de Bellman
+            tau (float): Valor de tau per a soft update del target network
+            buffer_size (int): Màxima capacitat del buffer
+            batch_size (int): Conjunt a agafar del buffer per a la xarxa neuronal     
+            dnn_upd (int): Freqüència d'actualització de la xarxa neuronal       
         """
-        random.seed(seed)
-        self.state_size = state_size
-        self.action_size = action_size
-
-        self.device = T.device("cuda:0" if T.cuda.is_available() else "cpu")
+        self.seed = seed
+        random.seed(seed)        
+        self.n_state = env.observation_space.shape[0] 
+        self.n_action = env.action_space.n
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.tau = tau
+        self.buffer_size = buffer_size
+        self.batch_size = batch_size        
+        self.dnn_upd = dnn_upd
+        self.device = T.device("cuda:0" if T.cuda.is_available() else "cpu") # Si hi ha GPU, utilitza-la
 
         if T.cuda.is_available():
             print(f'Running on {T.cuda.get_device_name(0)}')            
         else:
             print('Running on CPU')
+               
+        # Inicialització de les xarxes locals i target i de l'optimitzador
+        self.build_networks()
 
-        # Q-Network
-        self.qnetwork_local = DQNetwork(state_size, action_size, seed).to(self.device)
-        self.qnetwork_target = DQNetwork(state_size, action_size, seed).to(self.device)
-        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr=LR)
+    def build_networks(self):
 
-        # Replay memory
-        self.memory = ReplayBuffer(action_size, BUFFER_SIZE, BATCH_SIZE, seed)
-        # Initialize time step (for updating every UPDATE_EVERY steps)
+        # Inicialització de les xarxes locals i target            
+        self.qnetwork_local = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_target = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        # Inicialització de l'optimitzador
+        self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr = self.learning_rate)
+
+        # Inicialització del buffer de memòria
+        self.memory = ReplayBuffer(self.n_action, self.buffer_size, self.batch_size, self.seed)
+        
+        # Inicialització del comptador de pasos per a l'actualització de la xarxa neuronal
         self.t_step = 0
 
     def step(self, state, action, reward, next_state, done):
@@ -54,12 +66,12 @@ class Agent:
         self.memory.append(state, action, reward, next_state, done)
 
         # Learn every UPDATE_EVERY time steps.
-        self.t_step = (self.t_step + 1) % UPDATE_EVERY
+        self.t_step = (self.t_step + 1) % self.dnn_upd
         if self.t_step == 0:
             # If enough samples are available in memory, get random subset and learn
-            if len(self.memory) > BATCH_SIZE:
+            if len(self.memory) > self.batch_size:
                 experiences = self.memory.sample_batch()
-                self.learn(experiences, GAMMA)
+                self.learn(experiences, self.gamma)
 
     def act(self, state, eps=0.):
         """Returns actions for given state as per current policy.
@@ -79,7 +91,7 @@ class Agent:
         if random.random() > eps:
             return np.argmax(action_values.cpu().data.numpy())
         else:
-            return random.choice(np.arange(self.action_size))
+            return random.choice(np.arange(self.n_action))
 
     def learn(self, experiences, gamma):
         """Update value parameters using given batch of experience tuples.
@@ -106,7 +118,7 @@ class Agent:
         self.optimizer.step()
 
         # ------------------- update target network ------------------- #
-        self.soft_update(self.qnetwork_local, self.qnetwork_target, TAU)
+        self.soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
 
     def soft_update(self, local_model, target_model, tau):
         """Soft update model parameters.
