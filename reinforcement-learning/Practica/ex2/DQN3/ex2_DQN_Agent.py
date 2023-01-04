@@ -64,7 +64,7 @@ class Agent:
         # Inicialització del comptador de pasos per a l'actualització de la xarxa neuronal
         self.t_step = 0
 
-    def take_step(self, state, action, reward, next_state, done):
+    def __take_step(self, state, action, reward, next_state, done):
         """
         Afegeix l'experiència a la memòria i actualitza la xarxa neuronal
         """
@@ -77,9 +77,9 @@ class Agent:
             # Si hi ha suficients experiències en el buffer, agafar un lot i actualitzar la xarxa neuronal
             if len(self.memory) > self.batch_size:
                 experiences = self.memory.sample_batch()
-                self.update(experiences, self.gamma)
+                self.__update(experiences, self.gamma)
 
-    def get_action(self, state, eps):
+    def __get_action(self, state, eps):
         """
         Retorna l'acció segons l'estat actual i l'epsilon-greedy
         """
@@ -97,7 +97,7 @@ class Agent:
         else:
             return random.choice(np.arange(self.n_action))
 
-    def update(self, experiences, gamma):
+    def __update(self, experiences, gamma):
         """
         Actualitza els pesos de la xarxa neuronal local i target
         """
@@ -120,10 +120,15 @@ class Agent:
         loss.backward()
         self.optimizer.step()
 
-        # actualitzar els pesos de la xarxa neuronal target amb un soft update per a reduir el problema de l'estabilitat
-        self.soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
+        if self.device == 'cuda':
+            self.update_loss.append(loss.detach().cpu().numpy())
+        else:
+            self.update_loss.append(loss.detach().numpy())
 
-    def soft_update(self, local_model, target_model, tau):
+        # actualitzar els pesos de la xarxa neuronal target amb un soft update per a reduir el problema de l'estabilitat
+        self.__soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
+
+    def __soft_update(self, local_model, target_model, tau):
         """
         Soft update dels pesos de la xarxa neuronal target
         """
@@ -131,39 +136,90 @@ class Agent:
             target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data)    
 
 
-    def train(self, n_episodes=2000, max_t=1000, eps_start=1.0, eps_end=0.01, eps_decay=0.995):
+    def train(self, n_episodes=2000, max_t=1000, eps_start=1.0, eps_min=0.01, eps_decay=0.995, nblock =100, min_episodes=250, reward_threshold=200.0):
         """Deep Q-Learning.
 
         Params
         ======
-            n_episodes (int): maximum number of training episodes
-            max_t (int): maximum number of timesteps per episode
-            eps_start (float): starting value of epsilon, for epsilon-greedy action selection
-            eps_end (float): minimum value of epsilon
-            eps_decay (float): multiplicative factor (per episode) for decreasing epsilon
+            n_episodes (int): nombre màxim d'episodis
+            max_t (int): maxim nombre de pasos per episodi
+            eps_start (float): valor inicial d'epsilon
+            eps_min (float): valor mínim d'epsilon
+            eps_decay (float): factor de decaig d'epsilon
         """
-        scores = []  # list containing scores from each episode
-        scores_window = deque(maxlen=100)  # last 100 scores
-        eps = eps_start  # initialize epsilon
-        for i_episode in range(1, n_episodes + 1):
+        self.reward_threshold = reward_threshold
+        self.eps = eps_start  # inicialitzar epsilon
+        self.nblock = nblock
+        
+        self.update_loss = [] 
+        self.mean_update_loss = [] # llista amb els valors de la funció de pèrdua per episodi
+        
+        self.sync_eps = [] 
+
+        self.training_rewards = []  # llista amb els reward per episodi
+        self.mean_training_rewards = []  # llista amb la mitjana dels reward per episodi
+
+        print("Training...")
+        
+        for episode in range(1, n_episodes + 1):
             state = self.env.reset()
-            score = 0
+            self.total_reward = 0   
+            
             for t in range(max_t):
-                action = self.get_action(state, eps)
+                action = self.__get_action(state, self.eps)
                 next_state, reward, done, _ = self.env.step(action)
-                self.take_step(state, action, reward, next_state, done)
+                self.__take_step(state, action, reward, next_state, done)
                 state = next_state
-                score += reward
+                self.total_reward += reward
                 if done:
                     break
-            scores_window.append(score)  # save most recent score
-            scores.append(score)  # save most recent score
-            eps = max(eps_end, eps_decay * eps)  # decrease epsilon
-            print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)), end="")
-            if i_episode % 100 == 0:
-                print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_window)))
-            if np.mean(scores_window) >= 200.0:
-                print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode - 100, np.mean(scores_window)))
-                T.save(self.qnetwork_local.state_dict(), 'data.pth')
+
+            # actualitzar epsilon
+            self.eps = max(eps_min, eps_decay * self.eps)  # decrease epsilon            
+            
+            # afegir el reward de l'episodi a la llista
+            self.__save_statistics(self.total_reward)
+            
+            print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, self.__get_mean_training_rewards()), end="")
+            
+            ### comprovar si s'ha assolit el màxim d'episodis
+            training = not self.__is_solved_by_episode(episode, n_episodes) and not self.__is_solved_by_reward(episode, min_episodes, self.__get_mean_training_rewards())
+            
+            ### si no s'ha assolit el màxim d'episodis, continuar entrenant
+            if not training:
+                print('\nTraining finished.')
                 break
-        return scores
+
+            if episode % 100 == 0:
+                print('\rEpisode {}\tAverage Score: {:.2f}'.format(episode, self.__get_mean_training_rewards()))
+            if self.__get_mean_training_rewards() >= 200.0:
+
+                break        
+
+    def __get_mean_training_rewards(self):
+        return np.mean(self.training_rewards[-self.nblock:])
+
+    ######## Emmagatzemar epsilon, training rewards i loss#######
+    def __save_statistics(self, total_reward):
+        self.sync_eps.append(self.eps)              
+        self.training_rewards.append(self.total_reward)         
+        self.mean_training_rewards.append(np.mean(self.training_rewards[-self.nblock:]))
+        self.mean_update_loss.append(np.mean(self.update_loss))                                         
+        self.update_loss = []
+   
+    ######## Comprovar si s'ha arribat al llindar de recompensa i un mínim d'episodis
+    def __is_solved_by_reward(self, episode, min_episodios, mean_rewards):  
+        if mean_rewards >= self.reward_threshold and min_episodios <  episode:
+            print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, mean_rewards))
+            T.save(self.qnetwork_local.state_dict(), 'data.pth')
+            return True
+        else:
+            return False
+
+    ######## Comprovar si s'ha arribat al màxim d'episodis
+    def __is_solved_by_episode(self, episode, max_episodes):
+        if episode >= max_episodes:
+            print('\nEpisode limit reached.')
+            return True
+        else:
+            return False            
