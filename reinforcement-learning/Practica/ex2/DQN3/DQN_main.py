@@ -1,6 +1,7 @@
 import gym
-from ex2_DDQN_Agent import Agent
 import matplotlib.pyplot as plt
+
+from DQN_Agent import Agent
 
 BUFFER_SIZE = 100000    # Màxima capacitat del buffer
 BATCH_SIZE = 64         # Conjunt a agafar del buffer per a la xarxa neuronal
@@ -56,5 +57,3 @@ plot_rewards(agent)
 plot_loss(agent)
 plot_epsilon(agent)        
 env.close()
-
-# TODO: explicar Tau, MSE, soft

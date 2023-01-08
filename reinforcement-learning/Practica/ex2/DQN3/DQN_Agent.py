@@ -5,12 +5,12 @@ import torch as T
 import torch.nn.functional as F
 import torch.optim as optim
 
-from ex2_DDQN_NN import DDQNetwork
-from ex2_Buffer import ReplayBuffer
+from DQN_NN import DQNetwork
+from Buffer import ReplayBuffer
 
 class Agent:
     """ Agent que interactua amb l'entorn i apren a través de DQN"""    
-    def __init__(self, env, seed, learning_rate= 1e-3, gamma=0.99, tau=1e-3, buffer_size=100000, batch_size=64, dnn_upd=4):
+    def __init__(self, env, seed, learning_rate=1e-3, gamma=0.99, tau=1e-3, buffer_size=100000, batch_size=64, dnn_upd=4):
         """ Inicialitza l'agent per a l'aprenentatge per DQN
             L'agent inicialitza la xarxa neuronal local i target, el buffer de memòria i l'optimitzador    
         Params
@@ -51,8 +51,8 @@ class Agent:
 
     def __initialize_networks(self):
         # Inicialització de les xarxes locals i target            
-        self.qnetwork_local = DDQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
-        self.qnetwork_target = DDQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_local = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_target = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
         # Inicialització de l'optimitzador
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr = self.learning_rate)
 
@@ -148,6 +148,7 @@ class Agent:
         self.reward_threshold = reward_threshold
         self.eps = eps_start  # inicialitzar epsilon
         self.nblock = nblock
+        self.total_episodes = 0
         
         self.update_loss = [] 
         self.mean_update_loss = [] # llista amb els valors de la funció de pèrdua per episodi
@@ -185,11 +186,12 @@ class Agent:
             
             ### comprovar si s'ha assolit el màxim d'episodis
             training = not self.__is_solved_by_episode(episode, n_episodes) and not self.__is_solved_by_reward(episode, min_episodes, self.__get_mean_training_rewards())
-            
+                        
             ### si no s'ha assolit el màxim d'episodis, continuar entrenant
             if not training:
                 print('\nTraining finished.')
                 self.total_time = datetime.now() - start_time
+                self.total_episodes = episode
                 break
 
             if episode % 100 == 0:
@@ -210,7 +212,7 @@ class Agent:
     ######## Comprovar si s'ha arribat al llindar de recompensa i un mínim d'episodis
     def __is_solved_by_reward(self, episode, min_episodios, mean_rewards):  
         if mean_rewards >= self.reward_threshold and min_episodios <  episode:
-            print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, mean_rewards))
+            print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode, mean_rewards))
             T.save(self.qnetwork_local.state_dict(), 'data.pth')
             return True
         else:

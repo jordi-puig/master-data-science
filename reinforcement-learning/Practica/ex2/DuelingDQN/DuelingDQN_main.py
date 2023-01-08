@@ -1,5 +1,5 @@
 import gym
-from ex2_DQN_Agent import Agent
+from DuelingDQN_Agent import DuelingAgent
 import matplotlib.pyplot as plt
 
 BUFFER_SIZE = 100000    # Màxima capacitat del buffer
@@ -21,10 +21,9 @@ REWARD_THRESHOLD = 200  # Valor de recompensa per a considerar l'entrenament com
 # inicialització de l'entorn de gym
 env = gym.make('LunarLander-v2')
 # inicialització de l'agent amb els paràmetres de l'exercici
-agent = Agent(env, seed=0, learning_rate=LEARNING_RATE, gamma=GAMMA, tau=TAU, buffer_size=BUFFER_SIZE, batch_size=BATCH_SIZE, dnn_upd=DNN_UPD)
+agent = DuelingAgent(env, seed=0, learning_rate=LEARNING_RATE, gamma=GAMMA, tau=TAU, buffer_size=BUFFER_SIZE, batch_size=BATCH_SIZE, dnn_upd=DNN_UPD)
 # entrenament de l'agent
 scores = agent.train(N_EPISODES, MAX_T, EPS_START, EPS_MIN, EPS_DECAY, NBLOCK, MIN_EPISODES, REWARD_THRESHOLD)
-
 
 def plot_rewards(agent):
         plt.figure(figsize=(12,8))

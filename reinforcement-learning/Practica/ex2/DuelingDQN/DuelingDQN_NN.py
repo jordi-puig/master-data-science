@@ -2,7 +2,7 @@ import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 
-class DDQNetwork(nn.Module):
+class DuelingDQNetwork(nn.Module):
     """ Deep Q-Network model  per a l'entrenament de l'agent DQN """
  
     def __init__(self, n_state, n_action, seed, n_layer1=64, n_layer2=64, n_layer3=64):
@@ -16,7 +16,7 @@ class DDQNetwork(nn.Module):
             n_layer2 (int): Nombre de nodes en la segona capa oculta
             seed (int): Random seed per a inicialitzar els valors aleatoris
         """
-        super(DDQNetwork, self).__init__()
+        super(DuelingDQNetwork, self).__init__()
         self.seed = T.manual_seed(seed)
         self.fl1 = nn.Linear(n_state, n_layer1)
         self.fl2 = nn.Linear(n_layer1, n_layer2)
