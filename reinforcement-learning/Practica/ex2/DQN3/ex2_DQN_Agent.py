@@ -149,6 +149,7 @@ class Agent:
         self.reward_threshold = reward_threshold
         self.eps = eps_start  # inicialitzar epsilon
         self.nblock = nblock
+        self.total_episodes = 0
         
         self.update_loss = [] 
         self.mean_update_loss = [] # llista amb els valors de la funció de pèrdua per episodi
@@ -191,6 +192,7 @@ class Agent:
             if not training:
                 print('\nTraining finished.')
                 self.total_time = datetime.now() - start_time
+                self.total_episodes = episode
                 break
 
             if episode % 100 == 0:
@@ -211,7 +213,7 @@ class Agent:
     ######## Comprovar si s'ha arribat al llindar de recompensa i un mínim d'episodis
     def __is_solved_by_reward(self, episode, min_episodios, mean_rewards):  
         if mean_rewards >= self.reward_threshold and min_episodios <  episode:
-            print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode - 100, mean_rewards))
+            print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode, mean_rewards))
             T.save(self.qnetwork_local.state_dict(), 'data.pth')
             return True
         else:
