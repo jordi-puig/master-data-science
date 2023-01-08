@@ -1,5 +1,5 @@
 import gym
-from ex2_DQN_Agent import Agent
+from ex2_DDQN_Agent import Agent
 import matplotlib.pyplot as plt
 
 BUFFER_SIZE = 100000    # Màxima capacitat del buffer
@@ -56,3 +56,5 @@ plot_rewards(agent)
 plot_loss(agent)
 plot_epsilon(agent)        
 env.close()
+
+# TODO: explicar Tau, MSE, soft

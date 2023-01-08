@@ -5,13 +5,12 @@ import torch as T
 import torch.nn.functional as F
 import torch.optim as optim
 
-from ex2_DQN_NN import DQNetwork
+from ex2_DDQN_NN import DDQNetwork
 from ex2_Buffer import ReplayBuffer
 
 class Agent:
     """ Agent que interactua amb l'entorn i apren a través de DQN"""    
-    def __init__(self, env, seed, learning_rate= 1e-3, gamma=0.99, 
-                tau=1e-3, buffer_size=100000, batch_size=64, dnn_upd=4):
+    def __init__(self, env, seed, learning_rate= 1e-3, gamma=0.99, tau=1e-3, buffer_size=100000, batch_size=64, dnn_upd=4):
         """ Inicialitza l'agent per a l'aprenentatge per DQN
             L'agent inicialitza la xarxa neuronal local i target, el buffer de memòria i l'optimitzador    
         Params
@@ -52,8 +51,8 @@ class Agent:
 
     def __initialize_networks(self):
         # Inicialització de les xarxes locals i target            
-        self.qnetwork_local = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
-        self.qnetwork_target = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_local = DDQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_target = DDQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
         # Inicialització de l'optimitzador
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr = self.learning_rate)
 
