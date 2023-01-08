@@ -18,31 +18,27 @@ class DDQNetwork(nn.Module):
         """
         super(DDQNetwork, self).__init__()
         self.seed = T.manual_seed(seed)
-        self.fc1 = nn.Linear(n_state, n_layer1)
-        self.fc2 = nn.Linear(n_layer1, n_layer2)
+        self.fl1 = nn.Linear(n_state, n_layer1)
+        self.fl2 = nn.Linear(n_layer1, n_layer2)
 
-        self.advantage = nn.Sequential(
-            nn.Linear(n_layer2, n_layer3),
-            nn.ReLU(),
-            nn.Linear(n_layer3, n_action)
-        )
+        self.advantage1 = nn.Linear(n_layer2, n_layer3)
+        self.advantage2 = nn.Linear(n_layer3, n_action)
 
-        self.value = nn.Sequential(
-            nn.Linear(n_layer2, n_layer3),
-            nn.ReLU(),
-            nn.Linear(n_layer3, 1)
-        )
+        self.value1 = nn.Linear(n_layer2, n_layer3)
+        self.value2 = nn.Linear(n_layer3, 1)
 
     def forward(self, state):
         """
         Forward pass de la xarxa neuronal amb una capa oculta de 64 nodes i una capa de sortida de 4 nodes (una per cada acció)
         amb activació ReLU en les dues capes ocultes i activació lineal en la capa de sortida 
         """
-        state = F.relu(self.fc1(state))
-        state = F.relu(self.fc2(state))
+        state = F.relu(self.fl1(state))
+        state = F.relu(self.fl2(state))
 
-        advantage = self.advantage(state)
-        value = self.value(state)
-        
+        advantage = F.relu(self.advantage1(state))
+        advantage = self.advantage2(advantage)
+
+        value = F.relu(self.value1(state))
+        value = self.value2(value)
 
         return value + advantage - advantage.mean()
