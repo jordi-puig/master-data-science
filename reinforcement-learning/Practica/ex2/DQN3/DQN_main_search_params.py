@@ -22,20 +22,21 @@ REWARD_THRESHOLD = 200  # Valor de recompensa per a considerar l'entrenament com
 # inicialització de l'entorn de gym
 env = gym.make('LunarLander-v2')
 
-# inicialització de l'agent amb els paràmetres de l'exercici
+# paràmetres a buscar per a millorar l'aprenentatge de l'agent DQN (Deep Q-Network)
+LEARNING_RATE = [1e-3, 5e-4, 1e-4] # Velocitat d'aprenentatge
+EPS_DECAY = [0.99, 0.995, 0.999]   # Valor de decay de l'epsilon
+DNN_UPD = [1, 3, 5]                # Freqüència d'actualització de la xarxa neuronal
 
-LEARNING_RATE = [1e-3, 5e-4, 1e-4]              # Velocitat d'aprenentatge
-DNN_UPD = [1, 3, 5]              # Freqüència d'actualització de la xarxa neuronal
-EPS_DECAY = [0.99, 0.995]                # Decaiment de l'exploració
-
+# per emmagatzemar tots els agents creats
 agents = []
+# número de test
 n_test = 1
 # iteració per a buscar els millors paràmetres
 for lr in LEARNING_RATE:
     for upd in DNN_UPD:
         for eps in EPS_DECAY:
-            print("Test Number: ",n_test)
-            print("Learning rate: ", lr, " DNN update: ", upd, " Epsilon decay: ", eps)
+            print("Test Number: {} ".format(n_test))
+            print("Learning rate: {}, DNN update: {}, Epsilon decay: {}".format(lr, upd, eps))
             agent = Agent(env, seed=0, learning_rate=lr, gamma=GAMMA, tau=TAU, buffer_size=BUFFER_SIZE, batch_size=BATCH_SIZE, dnn_upd=upd)
             scores = agent.train(N_EPISODES, MAX_T, EPS_START, EPS_MIN, eps, NBLOCK, MIN_EPISODES, REWARD_THRESHOLD)
             agents.append(agent)
@@ -44,7 +45,8 @@ for lr in LEARNING_RATE:
             print("Epsilon: ", agent.sync_eps[-1])
             print("Steps: ", agent.total_episodes)
             print("Total time: ", agent.total_time)
-        n_test += 1               
+            print("===========================================================================================")
+            n_test += 1    
                   
 # tanquem l'entorn de gym
 env.close()
