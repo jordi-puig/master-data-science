@@ -26,6 +26,16 @@ class Agent:
             batch_size (int): Conjunt a agafar del buffer per a la xarxa neuronal     
             dnn_upd (int): Freqüència d'actualització de la xarxa neuronal       
         """
+        # Inicialització de paràmetres i printem tots els parametres d'entrada
+        print(f'Agent: {datetime.now()}')
+        print("seed: ", seed)
+        print("learning_rate: ", learning_rate)
+        print("gamma: ", gamma)
+        print("tau: ", tau)
+        print("buffer_size: ", buffer_size)
+        print("batch_size: ", batch_size)
+        print("dnn_upd: ", dnn_upd)
+
         self.env = env
         self.seed = seed         
         self.n_state = env.observation_space.shape[0] 
@@ -50,6 +60,8 @@ class Agent:
         self.__initialize_networks()
 
     def __initialize_networks(self):
+        print("Inicialització de la xarxa neuronal DQN")
+
         # Inicialització de les xarxes locals i target            
         self.qnetwork_local = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
         self.qnetwork_target = DQNetwork(self.n_state, self.n_action, self.seed).to(self.device)

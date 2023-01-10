@@ -1,4 +1,4 @@
-from DuelingDQN_NN import DuelingDQNetwork
+from AC_NN import ACNetwork
 
 import sys
 sys.path.append("../DQN3")
@@ -6,7 +6,7 @@ from DQN_Agent import Agent
 import torch.optim as optim
 from Buffer import ReplayBuffer
 
-class DuelingAgent(Agent):
+class ACAgent(Agent):
     """ Agent que interactua amb l'entorn i apren a través de DQN"""    
     """ Es sobreescriuen els mètodes de l'agent DQN per a que utilitzi la xarxa neuronal Dueling """
     """ Fem servir la herencia per a que l'agent Dueling hereti de l'agent DQN """
@@ -34,8 +34,8 @@ class DuelingAgent(Agent):
     def __initialize_networks(self):
         print("Sobreescrivim la xarxa neuronal local i target per a que siguin de tipus Dueling")        
         # Sobreescrivim la xarxa neuronal local i target per a que siguin de tipus Dueling
-        self.qnetwork_local = DuelingDQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
-        self.qnetwork_target = DuelingDQNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_local = ACNetwork(self.n_state, self.n_action, self.seed).to(self.device)
+        self.qnetwork_target = ACNetwork(self.n_state, self.n_action, self.seed).to(self.device)
         # Inicialització de l'optimitzador
         self.optimizer = optim.Adam(self.qnetwork_local.parameters(), lr = self.learning_rate)
 
