@@ -93,10 +93,16 @@ class Agent:
         """
         Retorna l'acció segons l'estat actual i l'epsilon-greedy
         """
-        state = T.from_numpy(state).float().unsqueeze(0).to(self.device)
+        # Convertir l'estat a un tensor de PyTorch
+        state = T.from_numpy(state).float().unsqueeze(0).to(self.device)    
+        # Passar a la fase d'avaluació per a desactivar el dropout    
+        # Amb T.no_grad() no es calculen els gradients per a no fer backpropagation
+        # Això ens permet agilitzar el càlcul de l'acció        
         self.qnetwork_local.eval()
         with T.no_grad():
+            # Obtenir els valors Q de l'estat actual per a cada acció a partir de la xarxa neuronal local
             action_values = self.qnetwork_local(state)
+        # tornar a la fase d'entrenament
         self.qnetwork_local.train()
 
         # Epsilon-greedy per a seleccionar l'acció. 
@@ -138,6 +144,12 @@ class Agent:
         # actualitzar els pesos de la xarxa neuronal target amb un soft update per a reduir el problema de l'estabilitat
         self.__soft_update(self.qnetwork_local, self.qnetwork_target, self.tau)
 
+    def __normal_update(self, local_model, target_model):
+        """
+        Actualitza els pesos de la xarxa neuronal target
+        """
+        target_model.load_state_dict(local_model.state_dict())
+
     def __soft_update(self, local_model, target_model, tau):
         """
         Soft update dels pesos de la xarxa neuronal target
@@ -146,7 +158,7 @@ class Agent:
             target_param.data.copy_(tau * local_param.data + (1.0 - tau) * target_param.data)    
 
 
-    def train(self, n_episodes=2000, max_t=1000, eps_start=1.0, eps_min=0.01, eps_decay=0.995, nblock =100, min_episodes=250, reward_threshold=200.0):
+    def train(self, n_episodes=2000, max_t=1000, eps_start=1.0, eps_min=0.01, eps_decay=0.995, nblock =100, min_episodes=250, reward_threshold=200.0, solved_by_mean_reward=True):
         """Deep Q-Learning.
 
         Params
@@ -157,6 +169,7 @@ class Agent:
             eps_min (float): valor mínim d'epsilon
             eps_decay (float): factor de decaig d'epsilon
         """
+        self.solved_by_mean_reward = solved_by_mean_reward
         self.reward_threshold = reward_threshold
         self.eps = eps_start  # inicialitzar epsilon
         self.nblock = nblock
@@ -197,8 +210,10 @@ class Agent:
             self.__log_info(start_time, episode)
             
             ### comprovar si s'ha assolit el màxim d'episodis
-            training = not self.__is_solved_by_episode(episode, n_episodes) and not self.__is_solved_by_reward(episode, min_episodes, self.__get_mean_training_rewards())
-                        
+            if self.solved_by_mean_reward:
+                training = not self.__is_solved_by_episode(episode, n_episodes) and not self.__is_solved_by_mean_reward(episode, min_episodes, self.__get_mean_training_rewards())
+            else:
+                training = not self.__is_solved_by_episode(episode, n_episodes) and not self.__is_solved_by_reward(episode, min_episodes, 97)                        
             ### si no s'ha assolit el màxim d'episodis, continuar entrenant
             if not training:
                 print('\nTraining finished.')
@@ -210,6 +225,7 @@ class Agent:
                 print('\rEpisode {}\tMean Rewards: {:.2f}\t'.format(episode, self.__get_mean_training_rewards()))
   
 
+    ######## Recuperar la mitjana dels rewards de l'últim bloc d'episodis ########
     def __get_mean_training_rewards(self):
         return np.mean(self.training_rewards[-self.nblock:])
 
@@ -220,15 +236,28 @@ class Agent:
         self.mean_training_rewards.append(np.mean(self.training_rewards[-self.nblock:]))
         self.mean_update_loss.append(np.mean(self.update_loss))                                         
         self.update_loss = []
-   
+
+    
     ######## Comprovar si s'ha arribat al llindar de recompensa i un mínim d'episodis
-    def __is_solved_by_reward(self, episode, min_episodios, mean_rewards):  
+    def __is_solved_by_mean_reward(self, episode, min_episodios, mean_rewards):  
         if mean_rewards >= self.reward_threshold and min_episodios <  episode:
             print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(episode, mean_rewards))
             T.save(self.qnetwork_local.state_dict(), 'data.pth')
             return True
         else:
             return False
+
+    ######## Cert si s'ha assolit un porcentatge de episodis amb un reward superior al threshold ########
+    def __is_solved_by_reward(self, episode, min_episodes, percent):
+        if (len(self.training_rewards) < self.nblock):
+            return False
+        sum_episodes = 0
+        for i in range(self.nblock):
+            if self.training_rewards[-i] > self.reward_threshold:
+                sum_episodes += 1
+        print("sum_episodes that are greater than the reward threshold: ", sum_episodes)
+        return (sum_episodes / self.nblock * 100) >= percent and episode >= min_episodes                
+
 
     ######## Comprovar si s'ha arribat al màxim d'episodis
     def __is_solved_by_episode(self, episode, max_episodes):
@@ -248,3 +277,6 @@ class Agent:
         total_minutes = delta.total_seconds() / 60           
         print('\rEpisode {}\tMean Rewards: {:.2f}\tEpsilon {}\tTime {} minutes\t'
               .format(episode, self.__get_mean_training_rewards(), round(self.eps,4), round(total_minutes,2)), end="")                    
+
+
+
